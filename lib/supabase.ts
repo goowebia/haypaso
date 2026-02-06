@@ -1,30 +1,33 @@
 
-
 import { createClient } from '@supabase/supabase-js';
 
-// Prioridad: 1. import.meta.env (Vite), 2. process.env (Node/Hostinger Build), 3. Hardcoded Fallback
-// Fix: Cast import.meta to any to resolve property 'env' error in environments missing Vite types
-const SUPABASE_URL = 
-  (import.meta as any).env?.VITE_SUPABASE_URL || 
-  (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : '') || 
-  'https://lgbdffqtijwyzkkbpkup.supabase.co';
-
-// Fix: Cast import.meta to any to resolve property 'env' error in environments missing Vite types
-const SUPABASE_ANON_KEY = 
-  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 
-  (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : '') || 
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnYmRmZnF0aWp3eXpra2Jwa3VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODA4MzgsImV4cCI6MjA4NTk1NjgzOH0.YyPG6Jvs5BSGeIV0kL_sfQWC7cz3zW7Qj-rsoyXKU7M';
-
-// Validación preventiva para evitar la pantalla azul
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn("⚠️ Las llaves de Supabase no están configuradas correctamente en el entorno.");
-}
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 /**
- * Genera un ID de usuario único persistente para las validaciones
+ * Obtiene de forma segura las variables de entorno priorizando import.meta.env de Vite.
+ * Si fallan, devuelve strings vacíos para evitar que la app crashee antes de mostrar el loader.
  */
+const getEnvVar = (key: string): string => {
+  try {
+    const metaEnv = (import.meta as any).env;
+    if (metaEnv && metaEnv[key]) return metaEnv[key];
+    
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key] as string;
+    }
+  } catch (e) {
+    console.warn(`Error leyendo la variable ${key}:`, e);
+  }
+  return '';
+};
+
+const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || 'https://lgbdffqtijwyzkkbpkup.supabase.co';
+const SUPABASE_ANON_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnYmRmZnF0aWp3eXpra2Jwa3VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODA4MzgsImV4cCI6MjA4NTk1NjgzOH0.YyPG6Jvs5BSGeIV0kL_sfQWC7cz3zW7Qj-rsoyXKU7M';
+
+// Solo inicializamos si tenemos llaves básicas para evitar el error de createClient
+export const supabase = createClient(
+  SUPABASE_URL || 'https://empty.supabase.co', 
+  SUPABASE_ANON_KEY || 'empty'
+);
+
 export const getUserId = () => {
   if (typeof window === 'undefined') return 'server';
   let userId = localStorage.getItem('hay_paso_user_id');
