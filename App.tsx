@@ -6,7 +6,8 @@ import Header from './components/Header';
 import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
-import { Plus, Zap, Loader2 } from 'lucide-react';
+import PhotoModal from './components/PhotoModal';
+import { Plus, Zap, Loader2, Navigation } from 'lucide-react';
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -15,31 +16,41 @@ const App: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [mapCenter, setMapCenter] = useState<[number, number]>([19.2433, -103.7247]);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[] | null>(null);
 
   useEffect(() => {
-    // Forzamos que la configuración esté lista de inmediato
-    const timer = setTimeout(() => {
-      setConfigReady(true);
-      console.log("App configurada y lista");
-    }, 100);
+    const timer = setTimeout(() => setConfigReady(true), 100);
+    
+    // Rastreo de ubicación en tiempo real
+    if ("geolocation" in navigator) {
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const newLoc: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+          setUserLocation(newLoc);
+          // Si es la primera vez que obtenemos ubicación, centramos el mapa
+          if (!userLocation) setMapCenter(newLoc);
+        },
+        (err) => console.error("Error de ubicación:", err),
+        { enableHighAccuracy: true, maximumAge: 10000 }
+      );
+      return () => navigator.geolocation.clearWatch(watchId);
+    }
+    
     return () => clearTimeout(timer);
   }, []);
 
   const fetchReports = useCallback(async () => {
     if (!configReady) return;
     setLoading(true);
-    
     try {
       const { data, error } = await supabase
         .from('reportes')
-        .select('*, validaciones(voto)')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
         setReports(data);
-        if (data.length > 0) {
-          setMapCenter([data[0].latitud, data[0].longitud]);
-        }
       }
     } catch (err) {
       console.error("Error cargando reportes:", err);
@@ -48,30 +59,15 @@ const App: React.FC = () => {
     }
   }, [configReady]);
 
-  const simulateReport = async () => {
-    const types = ['Accidente Pesado', 'Obras', 'Tráfico Lento', 'Clima'];
-    const randomType = types[Math.floor(Math.random() * types.length)] as any;
-    
-    await supabase.from('reportes').insert({
-      tipo: randomType,
-      descripcion: `SIMULACIÓN: Incidente reportado en km ${Math.floor(Math.random() * 200)}`,
-      latitud: 19.24 + (Math.random() - 0.5) * 0.1,
-      longitud: -103.72 + (Math.random() - 0.5) * 0.1,
-      estatus: 'activo'
-    });
-  };
-
   useEffect(() => {
     if (!configReady) return;
     fetchReports();
-    
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, () => {
         fetchReports();
       })
       .subscribe();
-      
     return () => { supabase.removeChannel(channel); };
   }, [fetchReports, configReady]);
 
@@ -86,7 +82,7 @@ const App: React.FC = () => {
   return (
     <div className="relative h-screen w-screen bg-slate-900 overflow-hidden font-sans select-none">
       <div className="absolute inset-0 z-0">
-        <MapView reports={reports} center={mapCenter} />
+        <MapView reports={reports} center={mapCenter} userLocation={userLocation} />
       </div>
 
       <div className="absolute top-0 left-0 right-0 z-50">
@@ -94,12 +90,14 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute right-6 bottom-[24vh] z-50 flex flex-col gap-4">
-        <button 
-          onClick={simulateReport}
-          className="bg-emerald-500 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform border-2 border-slate-900"
-        >
-          <Zap size={24} fill="currentColor" />
-        </button>
+        {userLocation && (
+          <button 
+            onClick={() => setMapCenter(userLocation)}
+            className="bg-slate-800 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform border-2 border-slate-700"
+          >
+            <Navigation size={24} className={mapCenter === userLocation ? 'text-blue-400' : ''} />
+          </button>
+        )}
 
         <button 
           onClick={() => setShowForm(true)}
@@ -109,13 +107,14 @@ const App: React.FC = () => {
         </button>
       </div>
 
+      {/* Panel Inferior con Scroll corregido */}
       <div 
-        className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 transition-all duration-500
-          ${panelOpen ? 'h-[60vh]' : 'h-16'}`}
+        className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 transition-all duration-500 flex flex-col
+          ${panelOpen ? 'h-[55vh]' : 'h-16'}`}
       >
         <div 
           onClick={() => setPanelOpen(!panelOpen)}
-          className="w-full flex flex-col items-center py-3 cursor-pointer group"
+          className="w-full flex flex-col items-center py-3 cursor-pointer group shrink-0"
         >
           <div className="w-12 h-1.5 bg-slate-700 rounded-full mb-2 group-hover:bg-yellow-400 transition-colors" />
           <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">
@@ -123,14 +122,15 @@ const App: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-20">
+        <div className="flex-1 overflow-y-auto px-1">
           <ReportList 
             reports={reports} 
             loading={loading} 
             onReportClick={(lat, lng) => {
               setMapCenter([lat, lng]);
               if (window.innerWidth < 768) setPanelOpen(false);
-            }} 
+            }}
+            onPhotoClick={(urls) => setSelectedPhotos(urls)}
           />
         </div>
       </div>
@@ -139,6 +139,10 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] bg-slate-900 p-4 overflow-y-auto">
           <ReportForm onClose={() => setShowForm(false)} />
         </div>
+      )}
+
+      {selectedPhotos && (
+        <PhotoModal photos={selectedPhotos} onClose={() => setSelectedPhotos(null)} />
       )}
     </div>
   );

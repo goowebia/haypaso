@@ -1,44 +1,34 @@
 
-// Add React import to resolve the namespace error
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { Report } from '../types';
 
 interface MapViewProps {
   reports: Report[];
   center: [number, number];
+  userLocation: [number, number] | null;
 }
 
-// COMPONENTE PARA ARREGLAR EL TAMAÑO Y RE-CENTRAR
 const MapController = ({ center }: { center: [number, number] }) => {
   const map = useMap();
-  
   useEffect(() => {
-    // Forzamos el recalculo del tamaño después de un breve delay
-    // Esto arregla el problema de los cuadros grises en producción
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 500);
-
+    const timer = setTimeout(() => map.invalidateSize(), 500);
     return () => clearTimeout(timer);
   }, [map]);
 
   useEffect(() => {
-    map.flyTo(center, 13, {
-      duration: 1.5,
-      easeLinearity: 0.25
-    });
+    map.flyTo(center, 13, { duration: 1.5 });
   }, [center, map]);
 
   return null;
 };
 
 const getIcon = (type: string) => {
-  let color = '#facc15'; // Default Tráfico (Amarillo)
-  if (type === 'Accidente Pesado') color = '#ef4444'; // Rojo
-  if (type === 'Obras') color = '#f97316'; // Naranja
-  if (type === 'Clima') color = '#3b82f6'; // Azul
+  let color = '#facc15';
+  if (type === 'Accidente Pesado') color = '#ef4444';
+  if (type === 'Obras') color = '#f97316';
+  if (type === 'Clima') color = '#3b82f6';
 
   const svgIcon = `
     <svg width="42" height="42" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -46,7 +36,6 @@ const getIcon = (type: string) => {
       <circle cx="12" cy="10" r="3" fill="white"/>
     </svg>
   `;
-
   return L.divIcon({
     className: 'custom-marker',
     html: svgIcon,
@@ -56,7 +45,20 @@ const getIcon = (type: string) => {
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center }) => {
+// Icono para el usuario (Punto azul estilo Waze)
+const userIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: `
+    <div class="relative flex items-center justify-center">
+      <div class="absolute w-8 h-8 bg-blue-500 rounded-full opacity-30 animate-ping"></div>
+      <div class="relative w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-lg"></div>
+    </div>
+  `,
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
+
+const MapView: React.FC<MapViewProps> = ({ reports, center, userLocation }) => {
   return (
     <MapContainer 
       center={center} 
@@ -66,11 +68,15 @@ const MapView: React.FC<MapViewProps> = ({ reports, center }) => {
       className="z-0"
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        attribution='&copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
       
       <MapController center={center} />
+
+      {userLocation && (
+        <Marker position={userLocation} icon={userIcon} zIndexOffset={1000} />
+      )}
 
       {reports.map((report) => (
         <Marker 
