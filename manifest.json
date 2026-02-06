@@ -1,0 +1,23 @@
+
+{
+  "short_name": "Hay Paso",
+  "name": "Hay Paso - Ruta Manzanillo-Colima-GDL",
+  "icons": [
+    {
+      "src": "https://picsum.photos/192/192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://picsum.photos/512/512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#facc15",
+  "description": "Reporte de tráfico en tiempo real para la ruta Manzanillo-Colima-Guadalajara."
+}

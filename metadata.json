@@ -1,0 +1,8 @@
+{
+  "name": "Hay Paso",
+  "description": "Reporte de tráfico en tiempo real para la ruta Manzanillo-Colima-Guadalajara. Evita el tráfico, llega a tiempo.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
