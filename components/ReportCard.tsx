@@ -18,14 +18,21 @@ const formatTimeAgo = (dateString: string) => {
 
 const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [voted, setVoted] = useState(false);
 
   const handleVote = async (e: React.MouseEvent, voto: 'sigue' | 'despejado') => {
     e.stopPropagation();
-    await supabase.from('validaciones').insert({
+    if (voted) return; // Evitar múltiples votos rápidos del mismo usuario en la sesión
+
+    const { error } = await supabase.from('validaciones').insert({
       reporte_id: report.id,
-      voto,
+      voto: voto,
       usuario_id: getUserId()
     });
+
+    if (!error) {
+      setVoted(true);
+    }
   };
 
   const openImage = (e: React.MouseEvent, foto: string) => {
@@ -33,18 +40,26 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
     setSelectedImage(foto);
   };
 
+  const isAlert = report.votos_sigue >= 5;
+
   return (
     <>
       <div 
         onClick={() => onClick(report.latitud, report.longitud)}
-        className="bg-slate-800 border border-slate-700 rounded-3xl p-5 mb-4 active:scale-[0.98] transition-transform cursor-pointer shadow-lg"
+        className={`bg-slate-800 border rounded-3xl p-5 mb-4 active:scale-[0.98] transition-all cursor-pointer shadow-lg ${
+          isAlert ? 'border-yellow-400 shadow-yellow-400/10' : 'border-slate-700'
+        }`}
       >
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-2">
-            <div className="bg-yellow-400/10 p-1.5 rounded-lg border border-yellow-400/20">
-              <AlertTriangle size={16} className="text-yellow-400" />
+            <div className={`p-1.5 rounded-lg border ${
+              isAlert ? 'bg-yellow-400 text-slate-900 border-yellow-500' : 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
+            }`}>
+              <AlertTriangle size={16} fill={isAlert ? "currentColor" : "none"} />
             </div>
-            <h3 className="font-black text-white text-[11px] uppercase tracking-tight">{report.tipo}</h3>
+            <h3 className={`font-black text-[11px] uppercase tracking-tight ${isAlert ? 'text-yellow-400' : 'text-white'}`}>
+              {report.tipo} {isAlert && " (CONFIRMADO)"}
+            </h3>
           </div>
           <div className="flex items-center gap-1 text-slate-500 text-[9px] font-bold uppercase tracking-widest">
             <Clock size={10} />
@@ -56,7 +71,6 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
           {report.descripcion || 'Sin descripción adicional.'}
         </p>
 
-        {/* Grid de Fotos con Click para Expandir */}
         {report.fotos && report.fotos.length > 0 && (
           <div className="grid grid-cols-4 gap-1.5 mb-4">
             {report.fotos.map((foto, idx) => (
@@ -77,20 +91,29 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
         <div className="flex gap-4 mt-2 border-t border-slate-700/50 pt-4">
           <button 
             onClick={(e) => handleVote(e, 'sigue')}
-            className="flex-1 bg-slate-700/50 hover:bg-yellow-400/10 hover:text-yellow-400 text-[10px] font-black text-slate-400 py-2.5 rounded-xl uppercase tracking-tighter transition-colors border border-transparent hover:border-yellow-400/30"
+            disabled={voted}
+            className={`flex-1 flex items-center justify-center gap-2 text-[10px] font-black py-2.5 rounded-xl uppercase tracking-tighter transition-all border ${
+              voted 
+                ? 'bg-slate-700/30 text-slate-600 border-transparent' 
+                : 'bg-slate-700/50 hover:bg-yellow-400/10 hover:text-yellow-400 text-slate-400 border-transparent hover:border-yellow-400/30 active:scale-95'
+            }`}
           >
-            Sigue ahí ({report.votos_sigue || 0})
+            Sigue ahí <span className="bg-yellow-400/10 px-1.5 rounded-md text-yellow-400">{report.votos_sigue || 0}</span>
           </button>
           <button 
             onClick={(e) => handleVote(e, 'despejado')}
-            className="flex-1 bg-slate-700/50 hover:bg-emerald-400/10 hover:text-emerald-400 text-[10px] font-black text-slate-400 py-2.5 rounded-xl uppercase tracking-tighter transition-colors border border-transparent hover:border-emerald-400/30"
+            disabled={voted}
+            className={`flex-1 flex items-center justify-center gap-2 text-[10px] font-black py-2.5 rounded-xl uppercase tracking-tighter transition-all border ${
+              voted 
+                ? 'bg-slate-700/30 text-slate-600 border-transparent' 
+                : 'bg-slate-700/50 hover:bg-emerald-400/10 hover:text-emerald-400 text-slate-400 border-transparent hover:border-emerald-400/30 active:scale-95'
+            }`}
           >
-            Despejado
+            Despejado <span className="bg-emerald-400/10 px-1.5 rounded-md text-emerald-400">{report.votos_despejado || 0}</span>
           </button>
         </div>
       </div>
 
-      {/* Visualizador de Imagen en Pantalla Completa */}
       {selectedImage && (
         <div 
           className="fixed inset-0 z-[200] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200"

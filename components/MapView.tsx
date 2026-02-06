@@ -30,18 +30,35 @@ const MapController = ({ center, zoom }: { center: [number, number], zoom: numbe
   return null;
 };
 
-const getIcon = (type: string) => {
-  let color = '#facc15'; 
+const getIcon = (type: string, votosSigue: number = 0) => {
+  // REGLA DEL ICONO DE ALERTA: >= 5 votos "sigue ahí"
+  if (votosSigue >= 5) {
+    const alertIcon = `
+      <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.6));">
+        <path d="M12 2L1 21H23L12 2Z" fill="#facc15" stroke="#000" stroke-width="1.5"/>
+        <path d="M12 9V14" stroke="#000" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M12 17V17.01" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="12" cy="13" r="10" stroke="#facc15" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+      </svg>
+    `;
+    return L.divIcon({
+      className: 'custom-marker alert-high',
+      html: alertIcon,
+      iconSize: [60, 60],
+      iconAnchor: [30, 45],
+      popupAnchor: [0, -45],
+    });
+  }
 
+  let color = '#facc15'; 
   if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
   if (type === 'Tráfico Pesado') color = '#f97316'; 
   if (['Obras', 'Vehículo en Vía', 'Vehículo en Lateral'].includes(type)) color = '#64748b'; 
   if (type.startsWith('Policía')) color = '#3b82f6'; 
   if (type === 'Clima') color = '#0ea5e9'; 
 
-  // SVG con filtro de sombra para máximo contraste sobre Google Maps
   const svgIcon = `
-    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));">
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));">
       <path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 5.02944 7.02944 1 12 1C16.9706 1 21 5.02944 21 10Z" fill="${color}" stroke="white" stroke-width="2.5"/>
       <circle cx="12" cy="10" r="3.5" fill="white"/>
     </svg>
@@ -50,20 +67,18 @@ const getIcon = (type: string) => {
   return L.divIcon({
     className: 'custom-marker',
     html: svgIcon,
-    iconSize: [50, 50],
-    iconAnchor: [25, 50],
-    popupAnchor: [0, -50],
+    iconSize: [46, 46],
+    iconAnchor: [23, 46],
+    popupAnchor: [0, -46],
   });
 };
 
 const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
 
-  // Efecto para refrescar la capa de tráfico cada 5 minutos
   useEffect(() => {
     const interval = setInterval(() => {
       setTrafficKey(Date.now());
-      console.log("Capa de tráfico actualizada");
     }, 5 * 60 * 1000); 
 
     return () => clearInterval(interval);
@@ -77,7 +92,6 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }
       style={{ height: '100%', width: '100%', position: 'absolute' }}
       className="z-0"
     >
-      {/* Capa de Tráfico Real de Google Maps */}
       <TileLayer
         key={trafficKey}
         attribution='&copy; Google Maps Traffic'
@@ -86,25 +100,28 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }
       
       <MapController center={center} zoom={zoom} />
 
-      {/* Marcadores de Incidentes */}
       {reports.map((report) => (
         <Marker 
           key={report.id} 
           position={[report.latitud, report.longitud]}
-          icon={getIcon(report.tipo)}
-          zIndexOffset={100}
+          icon={getIcon(report.tipo, report.votos_sigue)}
+          zIndexOffset={report.votos_sigue >= 5 ? 500 : 100}
         >
           <Popup closeButton={false}>
             <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
               <strong className="block text-yellow-400 uppercase text-[10px] font-black">{report.tipo}</strong>
               <div className="h-px bg-slate-700 my-1" />
-              <p className="text-slate-400 text-[9px] font-bold">REPORTE ACTIVO</p>
+              <p className="text-slate-400 text-[9px] font-bold">
+                {report.votos_sigue >= 5 ? '⚠️ ALERTA CONFIRMADA' : 'REPORTE EN RUTA'}
+              </p>
+              <div className="text-[8px] mt-1 text-slate-500 font-bold uppercase">
+                {report.votos_sigue} VOTOS SIGUE AHÍ
+              </div>
             </div>
           </Popup>
         </Marker>
       ))}
 
-      {/* Punto de Ubicación GPS (Renderizado al final para estar siempre al frente) */}
       {userLocation && (
         <CircleMarker 
           center={userLocation} 

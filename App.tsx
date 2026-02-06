@@ -21,15 +21,36 @@ const App: React.FC = () => {
 
   const fetchReports = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // Obtenemos los reportes y sus validaciones para contar votos
+      const { data: reportsData, error: reportsError } = await supabase
         .from('reportes')
-        .select('*')
+        .select(`
+          *,
+          validaciones (voto)
+        `)
         .eq('estatus', 'activo')
         .order('created_at', { ascending: false });
 
-      if (!error && data) setReports(data);
+      if (reportsError) throw reportsError;
+
+      if (reportsData) {
+        const processedReports: Report[] = reportsData.map((r: any) => {
+          const sigue = r.validaciones?.filter((v: any) => v.voto === 'sigue').length || 0;
+          const despejado = r.validaciones?.filter((v: any) => v.voto === 'despejado').length || 0;
+          return {
+            ...r,
+            votos_sigue: sigue,
+            votos_despejado: despejado
+          };
+        });
+
+        // REGLA DE AUTO-LIMPIEZA: Si hay más votos de despejado que de sigue, se oculta.
+        const visibleReports = processedReports.filter(r => r.votos_despejado <= r.votos_sigue);
+        
+        setReports(visibleReports);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching reports:", err);
     } finally {
       setLoading(false);
     }
@@ -54,9 +75,13 @@ const App: React.FC = () => {
     fetchReports();
     updateLocation();
 
+    // SUSCRIPCIÓN REALTIME UNIFICADA (Reportes y Validaciones)
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('app-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, () => {
+        fetchReports();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'validaciones' }, () => {
         fetchReports();
       })
       .subscribe();
@@ -75,7 +100,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none">
+    <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
       {/* Mapa */}
       <div className="absolute inset-0 z-0">
         <MapView 
@@ -112,7 +137,7 @@ const App: React.FC = () => {
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
         <button 
           onClick={updateLocation}
-          className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center group"
+          className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center"
         >
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
