@@ -1,15 +1,15 @@
 
 # Hay Paso 🚗💨 - Configuración de Base de Datos
 
-Ejecuta este script en el **SQL Editor** de tu proyecto en Supabase para habilitar todas las funciones. Esto corregirá el error de visibilidad.
+Ejecuta este script en el **SQL Editor** de tu proyecto en Supabase. Esto solucionará los problemas de visibilidad y hará que los botones de votación funcionen.
 
 ```sql
--- 1. Borrar tablas existentes para evitar conflictos de "CHECK" (CUIDADO: Borra datos actuales)
+-- 1. Borrar tablas actuales
 drop table if exists validaciones;
 drop table if exists chat_mensajes;
 drop table if exists reportes;
 
--- 2. Crear tabla de reportes con TODOS los tipos permitidos
+-- 2. Crear tabla de reportes
 create table reportes (
   id uuid default gen_random_uuid() primary key,
   created_at timestamp with time zone default now(),
@@ -44,22 +44,20 @@ create table chat_mensajes (
   contenido text
 );
 
--- 5. Habilitar RLS (Seguridad de Fila)
+-- 5. Habilitar RLS
 alter table reportes enable row level security;
 alter table validaciones enable row level security;
 alter table chat_mensajes enable row level security;
 
--- 6. Crear políticas para acceso público (ANON)
-create policy "Permitir lectura pública de reportes" on reportes for select using (true);
-create policy "Permitir insertar reportes" on reportes for insert with check (true);
+-- 6. Políticas públicas
+create policy "Public Select Reportes" on reportes for select using (true);
+create policy "Public Insert Reportes" on reportes for insert with check (true);
+create policy "Public Select Validaciones" on validaciones for select using (true);
+create policy "Public Insert Validaciones" on validaciones for insert with check (true);
+create policy "Public Select Chat" on chat_mensajes for select using (true);
+create policy "Public Insert Chat" on chat_mensajes for insert with check (true);
 
-create policy "Permitir lectura pública de validaciones" on validaciones for select using (true);
-create policy "Permitir insertar validaciones" on validaciones for insert with check (true);
-
-create policy "Permitir lectura pública de chat" on chat_mensajes for select using (true);
-create policy "Permitir insertar chat" on chat_mensajes for insert with check (true);
-
--- 7. Activar Tiempo Real (Realtime)
+-- 7. Realtime
 begin;
   drop publication if exists supabase_realtime;
   create publication supabase_realtime;

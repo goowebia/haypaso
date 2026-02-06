@@ -24,7 +24,8 @@ const App: React.FC = () => {
 
   const fetchReports = useCallback(async () => {
     try {
-      // BARRIDO: Obtenemos reportes y validaciones con una sola query eficiente
+      setLoading(true);
+      // BARRIDO TOTAL: Traemos reportes y sus validaciones asociadas
       const { data: reportsData, error: reportsError } = await supabase
         .from('reportes')
         .select(`
@@ -35,14 +36,15 @@ const App: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (reportsError) {
-        console.error("Error Supabase:", reportsError.message);
+        console.error("Error en barrido inicial:", reportsError.message);
         return;
       }
 
       if (reportsData) {
         const processedReports: Report[] = reportsData.map((r: any) => {
-          const sigue = r.validaciones?.filter((v: any) => v.voto === 'sigue').length || 0;
-          const despejado = r.validaciones?.filter((v: any) => v.voto === 'despejado').length || 0;
+          const validaciones = r.validaciones || [];
+          const sigue = validaciones.filter((v: any) => v.voto === 'sigue').length;
+          const despejado = validaciones.filter((v: any) => v.voto === 'despejado').length;
           return {
             ...r,
             votos_sigue: sigue,
@@ -50,7 +52,7 @@ const App: React.FC = () => {
           };
         });
 
-        // AUTO-LIMPIEZA: Si hay más de 3 votos 'despejado' y estos superan a 'sigue', se ocultan
+        // REGLA DE AUTO-LIMPIEZA: Ocultar si hay más despejados que sigue (mínimo 2 votos de despejado)
         const visibleReports = processedReports.filter(r => {
            if (r.votos_despejado > r.votos_sigue && r.votos_despejado >= 2) return false;
            return true;
@@ -59,7 +61,7 @@ const App: React.FC = () => {
         setReports(visibleReports);
       }
     } catch (err) {
-      console.error("Error crítico fetch:", err);
+      console.error("Error crítico de conexión:", err);
     } finally {
       setLoading(false);
     }
@@ -83,8 +85,9 @@ const App: React.FC = () => {
       );
     }
 
+    // Escucha activa de TODO en el esquema público para sincronización total
     const channel = supabase
-      .channel('public-sync')
+      .channel('global-realtime-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, () => fetchReports())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'validaciones' }, () => fetchReports())
       .subscribe();
@@ -125,11 +128,12 @@ const App: React.FC = () => {
 
       {chatOpen && <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] z-[55]" onClick={() => setChatOpen(false)} />}
 
-      {/* Botones Flotantes Lateral Derecho */}
+      {/* Botones Flotantes */}
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
         <button 
           onClick={fetchReports}
-          className="bg-slate-900/80 text-white p-4 rounded-full shadow-xl border border-white/10 backdrop-blur-md active:rotate-180 transition-transform"
+          disabled={loading}
+          className="bg-slate-900/80 text-white p-4 rounded-full shadow-xl border border-white/10 backdrop-blur-md active:rotate-180 transition-transform disabled:opacity-50"
         >
           <RefreshCw size={24} className={loading ? "animate-spin" : ""} />
         </button>
@@ -137,7 +141,7 @@ const App: React.FC = () => {
         <button 
           onClick={toggleFollow}
           className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${
-            followUser ? 'bg-yellow-400 text-slate-900 border-yellow-500' : 'bg-slate-900/80 text-yellow-400 border-yellow-400/20 backdrop-blur-md'
+            followUser ? 'bg-yellow-400 text-slate-900 border-yellow-500 shadow-yellow-400/40' : 'bg-slate-900/80 text-yellow-400 border-yellow-400/20 backdrop-blur-md'
           }`}
         >
           <Navigation size={26} fill="currentColor" className="rotate-45" />
@@ -145,28 +149,28 @@ const App: React.FC = () => {
 
         <button 
           onClick={() => setShowForm(true)}
-          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center"
+          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(250,204,21,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center"
         >
           <Plus size={32} strokeWidth={4} />
         </button>
       </div>
 
-      {/* Panel de Reportes Inferior */}
+      {/* Panel Inferior */}
       <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out ${panelOpen ? 'h-[70vh]' : 'h-24 pb-[env(safe-area-inset-bottom)]'}`}>
         <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer">
-          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
+          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3 shadow-inner" />
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">
-            {panelOpen ? 'BAJAR PANEL' : `${reports.length} REPORTES CERCA`}
+            {panelOpen ? 'BAJAR PANEL' : `${reports.length} REPORTES VISIBLES`}
           </p>
         </div>
-        <div className="flex-1 overflow-y-auto h-full">
+        <div className="flex-1 overflow-y-auto h-full px-1">
           <ReportList 
             reports={reports} 
             loading={loading} 
             onReportClick={(lat, lng) => {
               setFollowUser(false);
               setMapCenter([lat, lng]);
-              setMapZoom(16);
+              setMapZoom(16.5);
               if (window.innerWidth < 768) setPanelOpen(false);
             }} 
           />
