@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import { Report } from '../types';
 
@@ -9,11 +9,18 @@ interface MapViewProps {
   center: [number, number];
   zoom: number;
   userLocation: [number, number] | null;
+  onMapInteraction?: () => void;
 }
 
-const MapController = ({ center, zoom }: { center: [number, number], zoom: number }) => {
+const MapController = ({ center, zoom, onInteraction }: { center: [number, number], zoom: number, onInteraction?: () => void }) => {
   const map = useMap();
   
+  useMapEvents({
+    dragstart: () => onInteraction?.(),
+    zoomstart: () => onInteraction?.(),
+    touchmove: () => onInteraction?.(),
+  });
+
   useEffect(() => {
     setTimeout(() => {
       map.invalidateSize();
@@ -31,14 +38,13 @@ const MapController = ({ center, zoom }: { center: [number, number], zoom: numbe
 };
 
 const getIcon = (type: string, votosSigue: number = 0) => {
-  // REGLA DEL ICONO DE ALERTA: >= 5 votos "sigue ahí"
+  // REGLA DE ALERTA: Triángulo grande para 5+ votos
   if (votosSigue >= 5) {
     const alertIcon = `
-      <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.6));">
-        <path d="M12 2L1 21H23L12 2Z" fill="#facc15" stroke="#000" stroke-width="1.5"/>
+      <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
+        <path d="M12 2L1 21H23L12 2Z" fill="#facc15" stroke="#000" stroke-width="2"/>
         <path d="M12 9V14" stroke="#000" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M12 17V17.01" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="12" cy="13" r="10" stroke="#facc15" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
       </svg>
     `;
     return L.divIcon({
@@ -55,7 +61,6 @@ const getIcon = (type: string, votosSigue: number = 0) => {
   if (type === 'Tráfico Pesado') color = '#f97316'; 
   if (['Obras', 'Vehículo en Vía', 'Vehículo en Lateral'].includes(type)) color = '#64748b'; 
   if (type.startsWith('Policía')) color = '#3b82f6'; 
-  if (type === 'Clima') color = '#0ea5e9'; 
 
   const svgIcon = `
     <svg width="46" height="46" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));">
@@ -73,14 +78,13 @@ const getIcon = (type: string, votosSigue: number = 0) => {
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }) => {
+const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onMapInteraction }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTrafficKey(Date.now());
     }, 5 * 60 * 1000); 
-
     return () => clearInterval(interval);
   }, []);
 
@@ -94,11 +98,11 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }
     >
       <TileLayer
         key={trafficKey}
-        attribution='&copy; Google Maps Traffic'
+        attribution='&copy; Google Maps'
         url={`https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}&t=${trafficKey}`}
       />
       
-      <MapController center={center} zoom={zoom} />
+      <MapController center={center} zoom={zoom} onInteraction={onMapInteraction} />
 
       {reports.map((report) => (
         <Marker 
@@ -111,11 +115,8 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }
             <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
               <strong className="block text-yellow-400 uppercase text-[10px] font-black">{report.tipo}</strong>
               <div className="h-px bg-slate-700 my-1" />
-              <p className="text-slate-400 text-[9px] font-bold">
-                {report.votos_sigue >= 5 ? '⚠️ ALERTA CONFIRMADA' : 'REPORTE EN RUTA'}
-              </p>
-              <div className="text-[8px] mt-1 text-slate-500 font-bold uppercase">
-                {report.votos_sigue} VOTOS SIGUE AHÍ
+              <div className="text-[8px] text-slate-400 font-black uppercase">
+                {report.votos_sigue >= 5 ? '⚠️ PELIGRO CONFIRMADO' : 'REPORTE EN TIEMPO REAL'}
               </div>
             </div>
           </Popup>
@@ -125,14 +126,14 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }
       {userLocation && (
         <CircleMarker 
           center={userLocation} 
-          radius={10}
+          radius={12}
           zIndexOffset={1000}
           pathOptions={{ 
             fillColor: '#3b82f6', 
             fillOpacity: 1, 
             color: '#fff', 
             weight: 3,
-            className: 'gps-marker shadow-2xl animate-pulse'
+            className: 'gps-marker'
           }}
         />
       )}
