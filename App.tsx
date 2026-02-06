@@ -6,12 +6,14 @@ import Header from './components/Header';
 import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
+import ChatPanel from './components/ChatPanel';
 import { Plus, Navigation } from 'lucide-react';
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([19.2433, -103.7247]);
   const [mapZoom, setMapZoom] = useState(12);
@@ -40,7 +42,7 @@ const App: React.FC = () => {
           const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
-          setMapZoom(15.5); // Zoom equilibrado, no tan cerca como antes
+          setMapZoom(15.5);
         },
         (err) => console.error("Error GPS:", err),
         { enableHighAccuracy: true }
@@ -74,7 +76,7 @@ const App: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none">
-      {/* Mapa - Ocupa el fondo total sin restricciones */}
+      {/* Mapa */}
       <div className="absolute inset-0 z-0">
         <MapView 
           reports={reports} 
@@ -84,17 +86,33 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Header - Respetando safe areas en el componente */}
+      {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-50">
-        <Header />
+        <Header onToggleChat={() => setChatOpen(!chatOpen)} />
       </div>
+
+      {/* Panel de Chat Lateral */}
+      <div 
+        className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ease-in-out shadow-2xl ${
+          chatOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <ChatPanel onClose={() => setChatOpen(false)} />
+      </div>
+
+      {/* Overlay para cerrar chat al tocar el mapa */}
+      {chatOpen && (
+        <div 
+          className="absolute inset-0 bg-black/20 backdrop-blur-[2px] z-[55] animate-in fade-in"
+          onClick={() => setChatOpen(false)}
+        />
+      )}
 
       {/* Botones Flotantes */}
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
         <button 
           onClick={updateLocation}
           className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center group"
-          title="Centrar ubicación"
         >
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
@@ -128,17 +146,17 @@ const App: React.FC = () => {
             loading={loading} 
             onReportClick={(lat, lng) => {
               setMapCenter([lat, lng]);
-              setMapZoom(14.5); // Zoom equilibrado para ver reportes
+              setMapZoom(14.5);
               if (window.innerWidth < 768) setPanelOpen(false);
             }} 
           />
-          <div className="h-32" /> {/* Espaciador final */}
+          <div className="h-32" />
         </div>
       </div>
 
       {/* Formulario Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-2xl border border-white/10">
             <ReportForm onClose={(didSend) => handleCloseForm(didSend)} />
           </div>

@@ -1,8 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { Play, Bell, BellOff, BellRing } from 'lucide-react';
+import { Play, Bell, BellOff, BellRing, MessageSquare } from 'lucide-react';
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  onToggleChat: () => void;
+  hasUnread?: boolean;
+}
+
+const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
 
   useEffect(() => {
@@ -44,10 +49,20 @@ const Header: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        <button 
+          onClick={onToggleChat}
+          className="relative p-2.5 bg-slate-800 text-slate-300 rounded-full active:scale-90 transition-all border border-white/5"
+        >
+          <MessageSquare size={20} />
+          {hasUnread && (
+            <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-slate-900 rounded-full"></span>
+          )}
+        </button>
+
         <button 
           onClick={requestPermission}
-          className={`p-2 rounded-full transition-all active:scale-90 ${
+          className={`p-2.5 rounded-full transition-all active:scale-90 ${
             notifStatus === 'granted' 
               ? 'bg-yellow-400 text-slate-900 shadow-lg shadow-yellow-400/20' 
               : notifStatus === 'denied'
@@ -55,7 +70,7 @@ const Header: React.FC = () => {
                 : 'bg-slate-800 text-slate-400'
           }`}
         >
-          {notifStatus === 'granted' ? <BellRing size={18} /> : notifStatus === 'denied' ? <BellOff size={18} /> : <Bell size={18} />}
+          {notifStatus === 'granted' ? <BellRing size={20} /> : notifStatus === 'denied' ? <BellOff size={20} /> : <Bell size={20} />}
         </button>
       </div>
     </header>
