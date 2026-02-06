@@ -3,26 +3,36 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Hay Paso - Reporte de Tráfico</title>
     <link rel="manifest" href="/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
-        body { margin: 0; background-color: #0f172a; color: #f8fafc; font-family: sans-serif; overflow: hidden; }
-        .leaflet-container { height: 100%; width: 100%; z-index: 1; }
+        html, body, #root { 
+            height: 100%; 
+            width: 100%; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #0f172a; 
+            overflow: hidden;
+            position: fixed; /* Evita rebotes en móviles */
+        }
+        .leaflet-container { 
+            height: 100% !important; 
+            width: 100% !important; 
+            background: #0f172a !important;
+        }
         /* Custom scrollbar */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         
-        /* Fix para evitar el flash blanco al cargar */
-        #root { background-color: #0f172a; min-height: 100vh; }
+        /* Arreglo para los markers que a veces salen movidos */
+        .leaflet-marker-icon { border: none !important; background: none !important; }
     </style>
     
     <script>
-      // SHIM de compatibilidad para Hostinger / Vite
-      // Esto evita que librerías externas busquen 'process' y rompan la ejecución
       window.process = { env: { NODE_ENV: 'production' } };
       window.global = window;
     </script>
@@ -43,9 +53,8 @@
     }
     </script>
 </head>
-<body class="bg-slate-900">
+<body>
     <div id="root"></div>
-    <!-- CRÍTICO: Importación explícita del módulo de entrada -->
     <script type="module" src="./index.tsx"></script>
 </body>
 </html>
