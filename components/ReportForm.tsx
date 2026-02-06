@@ -1,324 +1,220 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, ArrowLeft, Camera, Trash2 } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ReportType } from '../types';
 
 interface ReportFormProps {
-  onClose: () => void;
+  onClose: (didSend?: boolean) => void;
 }
 
-type MenuState = 'main' | 'traffic' | 'police' | 'car' | 'details' | 'confirm_comment' | 'confirm_photo';
-
 const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
-  const [menu, setMenu] = useState<MenuState>('main');
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [comment, setComment] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [coords, setCoords] = useState<{lat: number, lng: number} | null>(null);
+  const [media, setMedia] = useState<{ type: 'image' | 'video'; data: string }[]>([]);
+  const [coords, setCoords] = useState<{ lat: number, lng: number } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [showToast, setShowToast] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => console.error(err),
-      { enableHighAccuracy: true }
-    );
+    const getPos = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => console.error("Error GPS:", err),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    };
+    getPos();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    const remainingSlots = 4 - photos.length;
-    const filesToProcess = Array.from(files).slice(0, remainingSlots);
-    filesToProcess.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotos(prev => [...prev, reader.result as string].slice(0, 4));
-      };
-      reader.readAsDataURL(file as Blob);
-    });
+  const handleMedia = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setMedia([{ type, data: reader.result as string }]); // Solo una pieza de evidencia principal para el diseño side-by-side
+    };
+    reader.readAsDataURL(file);
   };
 
-  const removePhoto = (index: number) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const selectCategory = (type: ReportType) => {
-    setSelectedType(type);
-    if (type.toLowerCase().includes('tráfico') || type === 'Alto Total') {
-      setMenu('confirm_photo');
-    } else {
-      setMenu('details');
-    }
-  };
-
-  const validateAndSend = () => {
-    if (!comment.trim()) {
-      setMenu('confirm_comment');
-    } else {
-      executeSend();
-    }
-  };
+  const removeMedia = () => setMedia([]);
 
   const executeSend = async () => {
-    if (!coords || !selectedType) return;
+    if (!selectedType || isSubmitting || !coords) return;
+
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('reportes').insert({
+      const { error } = await supabase.from('reportes').insert([{
         tipo: selectedType,
         descripcion: comment.trim() || `Reporte de ${selectedType}`,
-        fotos: photos.length > 0 ? photos : null,
+        fotos: media.filter(m => m.type === 'image').map(m => m.data),
+        video_url: media.find(m => m.type === 'video')?.data || null,
         latitud: coords.lat,
         longitud: coords.lng,
         estatus: 'activo'
-      });
+      }]);
+
       if (error) throw error;
-      onClose(); // Cerrar y volver al mapa
+
+      setShowToast(true);
+      
+      // Esperar un momento para que el usuario vea el éxito y cerrar
+      setTimeout(() => {
+        onClose(true); // Esto activará panelOpen en App.tsx
+      }, 1500);
+
     } catch (err) {
-      console.error(err);
+      console.error("Error enviando:", err);
+      alert("No se pudo guardar el reporte. Verifica tu conexión.");
       setIsSubmitting(false);
-      setMenu('details');
     }
   };
 
-  const CategoryButton = ({ label, icon: Icon, color, onClick }: any) => (
-    <button
-      onClick={onClick}
-      className={`${color} h-24 rounded-3xl flex flex-col items-center justify-center gap-1 border-b-4 border-black/20 shadow-lg active:scale-95 transition-all`}
-    >
-      <Icon size={28} className="text-slate-900" />
-      <span className="text-[10px] font-black text-slate-900 uppercase">{label}</span>
-    </button>
-  );
+  const categories: { label: ReportType; icon: any; color: string }[] = [
+    { label: 'Tráfico Lento', icon: Gauge, color: 'bg-yellow-400' },
+    { label: 'Tráfico Pesado', icon: Gauge, color: 'bg-orange-500' },
+    { label: 'Alto Total', icon: AlertOctagon, color: 'bg-red-600' },
+    { label: 'Policía Visible', icon: Shield, color: 'bg-blue-500' },
+    { label: 'Policía Escondido', icon: Shield, color: 'bg-indigo-600' },
+    { label: 'Accidente', icon: AlertOctagon, color: 'bg-red-500' },
+    { label: 'Obras', icon: HardHat, color: 'bg-amber-600' },
+    { label: 'Vehículo en Vía', icon: Car, color: 'bg-slate-500' },
+    { label: 'Clima', icon: AlertOctagon, color: 'bg-cyan-500' },
+  ];
 
-  const QuickButton = ({ label, icon: Icon, color, onClick }: any) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${color} h-28 rounded-3xl flex flex-col items-center justify-center gap-2 shadow-lg active:scale-95 transition-all border-b-4 border-black/20`}
-    >
-      <Icon size={32} strokeWidth={2.5} className="text-slate-900" />
-      <span className="text-xs font-black text-slate-900 uppercase leading-none">{label}</span>
-    </button>
-  );
-
-  // MODAL DE CONFIRMACIÓN (Diseño según capturas)
-  const ConfirmationModal = ({ title, subtext, onYes, onNo, yesLabel, noLabel }: any) => (
-    <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
-      <div className="bg-[#1e293b] p-10 rounded-[45px] border border-slate-700 shadow-2xl max-w-sm w-full text-center">
-        <div className="bg-[#facc15] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-yellow-400/30">
-          <Send size={42} className="text-slate-900" />
-        </div>
-        <h3 className="text-[22px] font-black text-white uppercase italic mb-3 tracking-tighter leading-tight">{title}</h3>
-        <p className="text-slate-400 text-[11px] font-bold mb-10 uppercase tracking-[0.1em] leading-relaxed px-2">
-          {subtext}
-        </p>
-        <div className="flex flex-col gap-4">
-          <button 
-            onClick={onYes}
-            className="bg-[#facc15] text-[#0f172a] py-5 rounded-[22px] font-black uppercase tracking-widest text-sm shadow-xl active:scale-95 transition-transform"
-          >
-            {yesLabel}
-          </button>
-          <button 
-            onClick={onNo}
-            disabled={isSubmitting}
-            className="bg-[#2d3748] text-slate-400 py-5 rounded-[22px] font-black uppercase tracking-widest text-xs border-2 border-slate-100 active:scale-95 transition-transform"
-          >
-            {isSubmitting ? "ENVIANDO..." : noLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (menu === 'confirm_photo') {
-    return (
-      <ConfirmationModal 
-        title="¿AGREGAR FOTO DEL TRÁFICO?"
-        subtext="UNA FOTO AYUDA A OTROS CONDUCTORES A VISUALIZAR MEJOR EL EMBOTELLAMIENTO."
-        yesLabel="SÍ, AGREGAR"
-        noLabel="NO, SOLO COMENTAR"
-        onYes={() => {
-          setMenu('details');
-          setTimeout(() => fileInputRef.current?.click(), 300);
-        }}
-        onNo={() => setMenu('details')}
-      />
-    );
-  }
-
-  if (menu === 'confirm_comment') {
-    return (
-      <ConfirmationModal 
-        title="¿AGREGAR COMENTARIO?"
-        subtext="UN COMENTARIO AYUDA A OTROS CONDUCTORES A ENTENDER MEJOR LA SITUACIÓN."
-        yesLabel="SÍ, AGREGAR"
-        noLabel="NO, ENVIAR YA"
-        onYes={() => {
-          setMenu('details');
-          setTimeout(() => commentRef.current?.focus(), 100);
-        }}
-        onNo={executeSend}
-      />
-    );
-  }
-
-  // PANTALLA DE DETALLES (Según captura de "Accidente")
-  if (menu === 'details') {
-    return (
-      <div className="p-6 bg-[#0f172a] h-full flex flex-col overflow-y-auto">
-        <div className="flex justify-between items-center mb-10">
-          <button onClick={() => setMenu('main')} className="text-slate-400 flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest">
-            <ArrowLeft size={18} /> CAMBIAR TIPO
-          </button>
-          <div className="bg-slate-900 border border-yellow-400/30 px-5 py-2 rounded-full shadow-lg">
-            <span className="text-[11px] font-black text-yellow-400 uppercase italic tracking-tighter">
-              {selectedType}
-            </span>
-          </div>
-        </div>
-
-        <div className="space-y-10 flex-1">
-          {/* Sección Fotos */}
-          <div>
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 block">FOTOS (MÁX 4)</label>
-            <div className="grid grid-cols-4 gap-3">
-              {photos.map((p, i) => (
-                <div key={i} className="aspect-square rounded-2xl bg-slate-800 border-2 border-slate-700 relative overflow-hidden group">
-                  <img src={p} className="w-full h-full object-cover" />
-                  <button onClick={() => removePhoto(i)} className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full shadow-lg">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-              {photos.length < 4 && (
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-2xl bg-slate-800/50 border-2 border-dashed border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 active:border-yellow-400 transition-all"
-                >
-                  <Camera size={24} />
-                  <span className="text-[9px] font-black uppercase tracking-tighter">AÑADIR</span>
-                </button>
-              )}
-            </div>
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} multiple accept="image/*" className="hidden" />
-          </div>
-
-          {/* Sección Comentario */}
-          <div>
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 block">¿QUÉ ESTÁ PASANDO?</label>
-            <div className="bg-[#1e293b] rounded-[35px] border-2 border-slate-700/50 shadow-inner overflow-hidden p-1 focus-within:border-yellow-400 transition-colors">
-              <textarea
-                ref={commentRef}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Escribe aquí..."
-                className="w-full bg-transparent text-white p-5 font-bold text-base h-40 resize-none placeholder:text-slate-600 focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-10 pb-4">
-          <button
-            onClick={validateAndSend}
-            disabled={isSubmitting || !coords}
-            className="w-full bg-[#facc15] text-[#0f172a] py-6 rounded-full font-black uppercase tracking-[0.15em] flex items-center justify-center gap-4 shadow-[0_15px_35px_-10px_rgba(250,204,21,0.3)] active:scale-95 transition-all"
-          >
-            {isSubmitting ? "ENVIANDO..." : <><Send size={24} strokeWidth={2.5} /> ENVIAR REPORTE</>}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // MENÚS DE CATEGORÍAS
-  if (menu === 'traffic') {
-    return (
-      <div className="p-6 bg-slate-900 h-full flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <button onClick={() => setMenu('main')} className="text-slate-400 flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest">
-            <ArrowLeft size={16} /> VOLVER
-          </button>
-          <h2 className="text-yellow-400 font-black text-lg uppercase italic tracking-tighter">TRÁFICO</h2>
-          <div className="w-8" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 flex-1">
-          <QuickButton label="Tráfico Lento" icon={Gauge} color="bg-yellow-400" onClick={() => selectCategory('Tráfico Lento')} />
-          <QuickButton label="Tráfico Pesado" icon={Gauge} color="bg-orange-500" onClick={() => selectCategory('Tráfico Pesado')} />
-          <QuickButton label="Alto Total" icon={AlertOctagon} color="bg-red-500" onClick={() => selectCategory('Alto Total')} />
-        </div>
-      </div>
-    );
-  }
-
-  if (menu === 'police') {
-    return (
-      <div className="p-6 bg-slate-900 h-full flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <button onClick={() => setMenu('main')} className="text-slate-400 flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest">
-            <ArrowLeft size={16} /> VOLVER
-          </button>
-          <h2 className="text-blue-400 font-black text-lg uppercase italic tracking-tighter">POLICÍA</h2>
-          <div className="w-8" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 flex-1">
-          <QuickButton label="Visible" icon={Shield} color="bg-blue-400" onClick={() => selectCategory('Policía Visible')} />
-          <QuickButton label="Escondido" icon={Shield} color="bg-indigo-500" onClick={() => selectCategory('Policía Escondido')} />
-          <QuickButton label="Carril Contrario" icon={Shield} color="bg-slate-400" onClick={() => selectCategory('Policía Contrario')} />
-        </div>
-      </div>
-    );
-  }
-
-  if (menu === 'car') {
-    return (
-      <div className="p-6 bg-slate-900 h-full flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <button onClick={() => setMenu('main')} className="text-slate-400 flex items-center gap-2 font-bold uppercase text-[10px] tracking-widest">
-            <ArrowLeft size={16} /> VOLVER
-          </button>
-          <h2 className="text-slate-300 font-black text-lg uppercase italic tracking-tighter">VEHÍCULO</h2>
-          <div className="w-8" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 flex-1">
-          <QuickButton label="En la vía" icon={Car} color="bg-slate-300" onClick={() => selectCategory('Vehículo en Vía')} />
-          <QuickButton label="En el lateral" icon={Car} color="bg-slate-500" onClick={() => selectCategory('Vehículo en Lateral')} />
-        </div>
-      </div>
-    );
-  }
-
-  // MENÚ PRINCIPAL
   return (
-    <div className="p-8 bg-[#0f172a] h-full overflow-y-auto">
-      <div className="flex justify-between items-center mb-10">
-        <div>
-          <h2 className="text-[28px] font-black text-white uppercase italic leading-none tracking-tighter">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.3em] mt-2">SELECCIONA CATEGORÍA</p>
+    <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-slate-700/50 rounded-[40px]">
+      {/* Success Overlay */}
+      {showToast && (
+        <div className="absolute inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+          <CheckCircle2 size={80} className="mb-4 animate-bounce" />
+          <h3 className="text-2xl font-black italic">¡REPORTE ENVIADO!</h3>
+          <p className="font-bold opacity-80 uppercase text-xs tracking-widest mt-2">Sincronizando con otros conductores...</p>
         </div>
-        <button type="button" onClick={onClose} className="p-3 bg-slate-800 text-slate-400 rounded-full hover:bg-slate-700 transition-colors">
-          <X size={24}/>
+      )}
+
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-black text-white italic tracking-tighter leading-none">REPORTAR</h2>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Selecciona el incidente</p>
+        </div>
+        <button onClick={() => onClose(false)} className="p-2 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform">
+          <X size={24} />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <CategoryButton label="Tráfico" icon={Gauge} color="bg-yellow-400" onClick={() => setMenu('traffic')} />
-        <CategoryButton label="Policía" icon={Shield} color="bg-blue-500" onClick={() => setMenu('police')} />
-        <CategoryButton label="Vehículo" icon={Car} color="bg-slate-400" onClick={() => setMenu('car')} />
-        <QuickButton label="Accidente" icon={AlertOctagon} color="bg-red-600" onClick={() => selectCategory('Accidente')} />
-        <QuickButton label="Obras" icon={HardHat} color="bg-orange-400" onClick={() => selectCategory('Obras')} />
-        <QuickButton label="Clima" icon={AlertOctagon} color="bg-blue-300" onClick={() => selectCategory('Clima')} />
+      {/* Categorías (Grid 3x3 compacto) */}
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        {categories.map((cat) => (
+          <button
+            key={cat.label}
+            onClick={() => setSelectedType(cat.label)}
+            className={`flex flex-col items-center justify-center p-3 rounded-2xl border-b-2 transition-all active:scale-95 ${
+              selectedType === cat.label 
+                ? `${cat.color} border-black/20 scale-105 shadow-xl shadow-${cat.color.split('-')[1]}-400/20` 
+                : 'bg-slate-800/40 border-slate-900 text-slate-500'
+            }`}
+          >
+            <cat.icon size={18} className={selectedType === cat.label ? "text-slate-900" : "text-slate-500"} />
+            <span className={`text-[8px] font-black uppercase text-center mt-1 leading-none ${selectedType === cat.label ? "text-slate-900" : ""}`}>
+              {cat.label}
+            </span>
+          </button>
+        ))}
       </div>
 
-      <div className="flex items-center justify-center gap-3 text-slate-600 text-[11px] font-black uppercase tracking-widest pt-4 pb-8">
-        <MapPin size={14} className={coords ? "text-emerald-500" : "animate-pulse"} />
-        {coords ? "GPS ACTIVADO" : "BUSCANDO UBICACIÓN..."}
+      {/* Multimedia & Comentario */}
+      <div className="space-y-4 mb-6">
+        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block text-center">Evidencia opcional</label>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center gap-2 bg-slate-800/80 border border-slate-700 py-4 rounded-3xl text-slate-300 font-black text-[10px] uppercase active:scale-95 transition-all"
+          >
+            <Camera size={18} className="text-yellow-400" />
+            Tomar Foto
+          </button>
+          <button 
+            onClick={() => videoInputRef.current?.click()}
+            className="flex items-center justify-center gap-2 bg-slate-800/80 border border-slate-700 py-4 rounded-3xl text-slate-300 font-black text-[10px] uppercase active:scale-95 transition-all"
+          >
+            <Video size={18} className="text-red-500" />
+            Video (30s)
+          </button>
+        </div>
+
+        <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
+        <input type="file" ref={videoInputRef} accept="video/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
+
+        {/* Sección de Comentario al lado de la Foto */}
+        {(selectedType || media.length > 0) && (
+          <div className="flex gap-3 bg-slate-900/50 p-3 rounded-[32px] border border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {media.length > 0 ? (
+              <div className="relative w-28 h-28 shrink-0">
+                <div className="w-full h-full rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-950 shadow-inner">
+                  {media[0].type === 'image' ? (
+                    <img src={media[0].data} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-red-500/10">
+                      <Video size={24} className="text-red-500" />
+                      <span className="text-[8px] font-black text-red-500">VIDEO</span>
+                    </div>
+                  )}
+                </div>
+                <button onClick={removeMedia} className="absolute -top-2 -right-2 bg-red-600 text-white p-1.5 rounded-full shadow-lg border-2 border-slate-900">
+                  <X size={12} strokeWidth={3} />
+                </button>
+              </div>
+            ) : (
+              <div className="w-28 h-28 shrink-0 rounded-2xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[8px] font-black">
+                SIN MEDIA
+              </div>
+            )}
+            
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="¿Algún detalle extra? (opcional)"
+              className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-28"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Footer & Big Button */}
+      <div className="mt-auto">
+        <div className="flex items-center justify-between mb-4 px-2">
+          <div className="flex items-center gap-2 text-slate-500 text-[9px] font-black uppercase tracking-widest">
+            <MapPin size={12} className={coords ? "text-emerald-500" : "animate-pulse"} />
+            {coords ? "GPS ACTIVADO" : "OBTENIENDO GPS..."}
+          </div>
+          {!selectedType && <div className="text-red-500 text-[9px] font-black uppercase animate-pulse italic">Selecciona incidente</div>}
+        </div>
+
+        <button
+          onClick={executeSend}
+          disabled={!selectedType || isSubmitting || !coords}
+          className={`w-full py-7 rounded-[35px] font-black uppercase tracking-[0.25em] flex items-center justify-center gap-4 transition-all duration-300 shadow-2xl ${
+            !selectedType || isSubmitting || !coords
+              ? 'bg-slate-800 text-slate-600 grayscale'
+              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/20 active:scale-95'
+          }`}
+        >
+          {isSubmitting ? (
+            <Loader2 size={28} className="animate-spin" />
+          ) : (
+            <>
+              <Send size={24} strokeWidth={3} />
+              ENVIAR REPORTE
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import Header from './components/Header';
 import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -35,7 +35,6 @@ const App: React.FC = () => {
   useEffect(() => {
     fetchReports();
     
-    // Simple Geolocation
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
@@ -55,6 +54,15 @@ const App: React.FC = () => {
       supabase.removeChannel(channel); 
     };
   }, [fetchReports]);
+
+  // Función para manejar el cierre del formulario y abrir la lista
+  const handleCloseForm = (didSend: boolean = false) => {
+    setShowForm(false);
+    if (didSend) {
+      // Si se envió el reporte, abrimos el panel de la lista automáticamente
+      setPanelOpen(true);
+    }
+  };
 
   return (
     <div className="relative h-screen w-screen bg-slate-900 overflow-hidden font-sans select-none">
@@ -106,9 +114,9 @@ const App: React.FC = () => {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
-          <div className="bg-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
-            <ReportForm onClose={() => setShowForm(false)} />
+        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-800 w-full max-w-md rounded-[40px] overflow-hidden shadow-2xl border border-slate-700">
+            <ReportForm onClose={(didSend) => handleCloseForm(didSend)} />
           </div>
         </div>
       )}
