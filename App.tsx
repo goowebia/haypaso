@@ -14,7 +14,7 @@ const App: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([19.2433, -103.7247]);
-  const [mapZoom, setMapZoom] = useState(13);
+  const [mapZoom, setMapZoom] = useState(12);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   const fetchReports = useCallback(async () => {
@@ -40,7 +40,7 @@ const App: React.FC = () => {
           const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
-          setMapZoom(17); // Zoom de calle para mejor detalle
+          setMapZoom(15.5); // Zoom equilibrado, no tan cerca como antes
         },
         (err) => console.error("Error GPS:", err),
         { enableHighAccuracy: true }
@@ -73,8 +73,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="relative h-full w-full bg-slate-900 overflow-hidden font-sans select-none">
-      {/* Mapa - Ahora ocupa el 100% real */}
+    <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none">
+      {/* Mapa - Ocupa el fondo total sin restricciones */}
       <div className="absolute inset-0 z-0">
         <MapView 
           reports={reports} 
@@ -84,35 +84,33 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Header */}
+      {/* Header - Respetando safe areas en el componente */}
       <div className="absolute top-0 left-0 right-0 z-50">
         <Header />
       </div>
 
-      {/* Botones Flotantes - Reposicionados para mejor acceso táctil */}
-      <div className="absolute right-6 bottom-[14vh] z-50 flex flex-col gap-4">
-        {/* Botón de centrar ubicación con mayor zoom */}
+      {/* Botones Flotantes */}
+      <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
         <button 
           onClick={updateLocation}
-          className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center group hover:border-yellow-400"
-          title="Centrar y acercar"
+          className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center group"
+          title="Centrar ubicación"
         >
-          <Navigation size={28} fill="currentColor" className="rotate-45 group-active:scale-110 transition-transform" />
+          <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
 
-        {/* Botón de agregar reporte */}
         <button 
           onClick={() => setShowForm(true)}
-          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(250,204,21,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center"
+          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-[0_0_40px_rgba(250,204,21,0.3)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center"
         >
-          <Plus size={36} strokeWidth={4} />
+          <Plus size={32} strokeWidth={4} />
         </button>
       </div>
 
       {/* Panel Inferior */}
       <div 
         className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out
-          ${panelOpen ? 'h-[70vh]' : 'h-24'}`}
+          ${panelOpen ? 'h-[70vh]' : 'h-24 pb-[env(safe-area-inset-bottom)]'}`}
       >
         <div 
           onClick={() => setPanelOpen(!panelOpen)}
@@ -124,23 +122,24 @@ const App: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-10 h-full">
+        <div className="flex-1 overflow-y-auto h-full">
           <ReportList 
             reports={reports} 
             loading={loading} 
             onReportClick={(lat, lng) => {
               setMapCenter([lat, lng]);
-              setMapZoom(16); // Zoom intermedio para ver el reporte
+              setMapZoom(14.5); // Zoom equilibrado para ver reportes
               if (window.innerWidth < 768) setPanelOpen(false);
             }} 
           />
+          <div className="h-32" /> {/* Espaciador final */}
         </div>
       </div>
 
       {/* Formulario Modal */}
       {showForm && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-[0_0_150px_rgba(0,0,0,1)] border border-white/10">
+          <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-2xl border border-white/10">
             <ReportForm onClose={(didSend) => handleCloseForm(didSend)} />
           </div>
         </div>
