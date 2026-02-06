@@ -1,32 +1,31 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-/**
- * Obtiene de forma segura las variables de entorno priorizando import.meta.env de Vite.
- * Si fallan, devuelve strings vacíos para evitar que la app crashee antes de mostrar el loader.
- */
-const getEnvVar = (key: string): string => {
+// Función ultra segura para leer variables
+const getSafeEnv = (key: string, fallback: string): string => {
   try {
-    const metaEnv = (import.meta as any).env;
-    if (metaEnv && metaEnv[key]) return metaEnv[key];
-    
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    // 1. Intentar con Vite
+    const viteEnv = (import.meta as any).env?.[key];
+    if (viteEnv) return viteEnv;
+
+    // 2. Intentar con process (Hostinger Build)
+    if (typeof process !== 'undefined' && process.env?.[key]) {
       return process.env[key] as string;
     }
   } catch (e) {
-    console.warn(`Error leyendo la variable ${key}:`, e);
+    // Silencioso
   }
-  return '';
+  return fallback;
 };
 
-const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || 'https://lgbdffqtijwyzkkbpkup.supabase.co';
-const SUPABASE_ANON_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnYmRmZnF0aWp3eXpra2Jwa3VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODA4MzgsImV4cCI6MjA4NTk1NjgzOH0.YyPG6Jvs5BSGeIV0kL_sfQWC7cz3zW7Qj-rsoyXKU7M';
+// Llaves de respaldo directas para asegurar que el cliente se cree siempre
+const DEFAULT_URL = 'https://lgbdffqtijwyzkkbpkup.supabase.co';
+const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnYmRmZnF0aWp3eXpra2Jwa3VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzODA4MzgsImV4cCI6MjA4NTk1NjgzOH0.YyPG6Jvs5BSGeIV0kL_sfQWC7cz3zW7Qj-rsoyXKU7M';
 
-// Solo inicializamos si tenemos llaves básicas para evitar el error de createClient
-export const supabase = createClient(
-  SUPABASE_URL || 'https://empty.supabase.co', 
-  SUPABASE_ANON_KEY || 'empty'
-);
+const supabaseUrl = getSafeEnv('VITE_SUPABASE_URL', DEFAULT_URL);
+const supabaseAnonKey = getSafeEnv('VITE_SUPABASE_ANON_KEY', DEFAULT_KEY);
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const getUserId = () => {
   if (typeof window === 'undefined') return 'server';
