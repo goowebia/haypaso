@@ -9,14 +9,25 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
-        html, body, #root { 
+        :root {
+            --app-height: 100%;
+        }
+        html, body { 
             height: 100%; 
             width: 100%; 
             margin: 0; 
             padding: 0; 
             background-color: #0f172a; 
             overflow: hidden;
-            position: fixed; /* Evita rebotes en móviles */
+            /* Soporte para áreas seguras de iPhone (Notch) */
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        #root {
+            height: 100dvh; /* Altura dinámica para móviles */
+            width: 100%;
+            display: flex;
+            flex-direction: column;
         }
         .leaflet-container { 
             height: 100% !important; 
@@ -28,8 +39,12 @@
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         
-        /* Arreglo para los markers que a veces salen movidos */
         .leaflet-marker-icon { border: none !important; background: none !important; }
+        
+        /* Animación suave para el cambio de zoom */
+        .leaflet-zoom-animated {
+            transition-duration: 500ms !important;
+        }
     </style>
     
     <script>

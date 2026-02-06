@@ -7,14 +7,18 @@ import { Report } from '../types';
 interface MapViewProps {
   reports: Report[];
   center: [number, number];
+  zoom: number;
   userLocation: [number, number] | null;
 }
 
-const MapController = ({ center }: { center: [number, number] }) => {
+const MapController = ({ center, zoom }: { center: [number, number], zoom: number }) => {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
+    map.setView(center, zoom, {
+      animate: true,
+      duration: 1.0
+    });
+  }, [center, zoom, map]);
   return null;
 };
 
@@ -43,26 +47,33 @@ const getIcon = (type: string) => {
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center, userLocation }) => {
+const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation }) => {
   return (
     <MapContainer 
       center={center} 
-      zoom={13} 
+      zoom={zoom} 
       zoomControl={false}
       style={{ height: '100%', width: '100%' }}
+      className="z-0"
     >
       <TileLayer
         attribution='&copy; CARTO'
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
       
-      <MapController center={center} />
+      <MapController center={center} zoom={zoom} />
 
       {userLocation && (
         <CircleMarker 
           center={userLocation} 
-          radius={8}
-          pathOptions={{ fillColor: '#3b82f6', fillOpacity: 1, color: '#fff', weight: 2 }}
+          radius={10}
+          pathOptions={{ 
+            fillColor: '#3b82f6', 
+            fillOpacity: 0.8, 
+            color: '#fff', 
+            weight: 3,
+            className: 'gps-marker shadow-2xl'
+          }}
         />
       )}
 
@@ -76,7 +87,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, userLocation }) => {
             <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
               <strong className="block text-yellow-400 uppercase text-xs font-black">{report.tipo}</strong>
               <div className="h-px bg-slate-700 my-1" />
-              <p className="text-slate-400 text-[10px] font-bold">Votos: {report.votos_sigue || 0}</p>
+              <p className="text-slate-400 text-[10px] font-bold">ACTIVO</p>
             </div>
           </Popup>
         </Marker>

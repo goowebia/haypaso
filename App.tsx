@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [mapCenter, setMapCenter] = useState<[number, number]>([19.2433, -103.7247]);
+  const [mapZoom, setMapZoom] = useState(13);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   const fetchReports = useCallback(async () => {
@@ -39,6 +40,7 @@ const App: React.FC = () => {
           const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
+          setMapZoom(17); // Zoom de calle para mejor detalle
         },
         (err) => console.error("Error GPS:", err),
         { enableHighAccuracy: true }
@@ -66,17 +68,18 @@ const App: React.FC = () => {
     setShowForm(false);
     if (didSend) {
       setPanelOpen(true);
-      fetchReports(); // Forzar actualización inmediata
+      fetchReports();
     }
   };
 
   return (
-    <div className="relative h-screen w-screen bg-slate-900 overflow-hidden font-sans select-none">
-      {/* Mapa */}
+    <div className="relative h-full w-full bg-slate-900 overflow-hidden font-sans select-none">
+      {/* Mapa - Ahora ocupa el 100% real */}
       <div className="absolute inset-0 z-0">
         <MapView 
           reports={reports} 
           center={mapCenter} 
+          zoom={mapZoom}
           userLocation={userLocation} 
         />
       </div>
@@ -86,38 +89,38 @@ const App: React.FC = () => {
         <Header />
       </div>
 
-      {/* Botones Flotantes */}
-      <div className="absolute right-6 bottom-[12vh] z-50 flex flex-col gap-3">
-        {/* Botón de centrar ubicación */}
+      {/* Botones Flotantes - Reposicionados para mejor acceso táctil */}
+      <div className="absolute right-6 bottom-[14vh] z-50 flex flex-col gap-4">
+        {/* Botón de centrar ubicación con mayor zoom */}
         <button 
           onClick={updateLocation}
-          className="bg-slate-800 text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-transform border-2 border-slate-700 flex items-center justify-center"
-          title="Centrar mi ubicación"
+          className="bg-slate-900/80 backdrop-blur-md text-yellow-400 p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 border-yellow-400/20 flex items-center justify-center group hover:border-yellow-400"
+          title="Centrar y acercar"
         >
-          <Navigation size={24} fill="currentColor" className="rotate-45" />
+          <Navigation size={28} fill="currentColor" className="rotate-45 group-active:scale-110 transition-transform" />
         </button>
 
         {/* Botón de agregar reporte */}
         <button 
           onClick={() => setShowForm(true)}
-          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-2xl active:scale-90 transition-transform border-4 border-slate-900 flex items-center justify-center"
+          className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(250,204,21,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center"
         >
-          <Plus size={32} strokeWidth={4} />
+          <Plus size={36} strokeWidth={4} />
         </button>
       </div>
 
       {/* Panel Inferior */}
       <div 
-        className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 transition-all duration-300
-          ${panelOpen ? 'h-[65vh]' : 'h-20'}`}
+        className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out
+          ${panelOpen ? 'h-[70vh]' : 'h-24'}`}
       >
         <div 
           onClick={() => setPanelOpen(!panelOpen)}
-          className="w-full flex flex-col items-center py-3 cursor-pointer"
+          className="w-full flex flex-col items-center py-4 cursor-pointer"
         >
-          <div className="w-12 h-1 bg-slate-700 rounded-full mb-2" />
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">
-            {panelOpen ? 'CERRAR' : `${reports.length} REPORTES CERCANOS`}
+          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
+          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">
+            {panelOpen ? 'BAJAR PANEL' : `${reports.length} REPORTES EN RUTA`}
           </p>
         </div>
 
@@ -127,6 +130,7 @@ const App: React.FC = () => {
             loading={loading} 
             onReportClick={(lat, lng) => {
               setMapCenter([lat, lng]);
+              setMapZoom(16); // Zoom intermedio para ver el reporte
               if (window.innerWidth < 768) setPanelOpen(false);
             }} 
           />
@@ -135,8 +139,8 @@ const App: React.FC = () => {
 
       {/* Formulario Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0f172a] w-full max-w-md rounded-[45px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-slate-800">
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-[0_0_150px_rgba(0,0,0,1)] border border-white/10">
             <ReportForm onClose={(didSend) => handleCloseForm(didSend)} />
           </div>
         </div>
