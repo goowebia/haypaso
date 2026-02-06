@@ -1,64 +1,68 @@
 
-# Hay Paso 🚗💨
+# Hay Paso 🚗💨 - Configuración de Base de Datos
 
-**Evita el tráfico, llega a tiempo.**
-
-PWA de reporte de tráfico en tiempo real para la ruta **Manzanillo - Colima - Guadalajara**.
-
-## Configuración de Supabase (CRÍTICO)
-
-Para que la aplicación funcione, debes ejecutar este código SQL en el **SQL Editor** de tu panel de Supabase:
+Ejecuta este script en el **SQL Editor** de tu proyecto en Supabase para habilitar todas las funciones. Esto corregirá el error de visibilidad.
 
 ```sql
--- 1. Crear tabla de reportes
-create table if not exists reportes (
+-- 1. Borrar tablas existentes para evitar conflictos de "CHECK" (CUIDADO: Borra datos actuales)
+drop table if exists validaciones;
+drop table if exists chat_mensajes;
+drop table if exists reportes;
+
+-- 2. Crear tabla de reportes con TODOS los tipos permitidos
+create table reportes (
   id uuid default gen_random_uuid() primary key,
   created_at timestamp with time zone default now(),
-  tipo text check (tipo in ('Accidente Pesado', 'Obras', 'Tráfico Lento', 'Clima')),
+  tipo text check (tipo in (
+    'Tráfico Lento', 'Tráfico Pesado', 'Alto Total', 
+    'Accidente', 'Obras', 
+    'Policía Visible', 'Policía Escondido', 'Policía Contrario',
+    'Vehículo en Vía', 'Vehículo en Lateral', 'Clima'
+  )),
   descripcion text,
-  foto_url text,
+  fotos text[] default '{}',
   video_url text,
-  latitud float8,
-  longitud float8,
+  latitud float8 not null,
+  longitud float8 not null,
   estatus text default 'activo' check (estatus in ('activo', 'despejado'))
 );
 
--- 2. Crear tabla de validaciones
-create table if not exists validaciones (
+-- 3. Crear tabla de validaciones
+create table validaciones (
   id uuid default gen_random_uuid() primary key,
   reporte_id uuid references reportes(id) on delete cascade,
   voto text check (voto in ('sigue', 'despejado')),
-  usuario_id text
+  usuario_id text,
+  created_at timestamp with time zone default now()
 );
 
--- 3. Habilitar Realtime
-alter publication supabase_realtime add table reportes;
+-- 4. Crear tabla de chat
+create table chat_mensajes (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default now(),
+  usuario_id text,
+  contenido text
+);
 
--- 4. Crear el Bucket de Storage (Si te da error "Bucket not found")
--- Nota: Si el SQL de abajo no funciona, créalo manualmente en Storage > New Bucket > nombre: fotos_accidentes (Público)
-insert into storage.buckets (id, name, public) 
-values ('fotos_accidentes', 'fotos_accidentes', true)
-on conflict (id) do nothing;
+-- 5. Habilitar RLS (Seguridad de Fila)
+alter table reportes enable row level security;
+alter table validaciones enable row level security;
+alter table chat_mensajes enable row level security;
 
--- 5. Políticas de Storage para permitir subidas (Anon)
-create policy "Permitir subidas anónimas" on storage.objects for insert with check (bucket_id = 'fotos_accidentes');
-create policy "Permitir lectura pública" on storage.objects for select using (bucket_id = 'fotos_accidentes');
+-- 6. Crear políticas para acceso público (ANON)
+create policy "Permitir lectura pública de reportes" on reportes for select using (true);
+create policy "Permitir insertar reportes" on reportes for insert with check (true);
+
+create policy "Permitir lectura pública de validaciones" on validaciones for select using (true);
+create policy "Permitir insertar validaciones" on validaciones for insert with check (true);
+
+create policy "Permitir lectura pública de chat" on chat_mensajes for select using (true);
+create policy "Permitir insertar chat" on chat_mensajes for insert with check (true);
+
+-- 7. Activar Tiempo Real (Realtime)
+begin;
+  drop publication if exists supabase_realtime;
+  create publication supabase_realtime;
+commit;
+alter publication supabase_realtime add table reportes, validaciones, chat_mensajes;
 ```
-
-## Características principales
-- 📍 **Reportes Geocalizados:** Captura automática de ubicación.
-- 📸 **Multimedia:** Fotos comprimidas (<300KB) y videos cortos (máx 15s).
-- ⚡ **Tiempo Real:** Notificaciones instantáneas vía Supabase Realtime.
-- 🗺️ **Mapa Interactivo:** Visualización clara de incidentes con Leaflet.
-- 📱 **PWA:** Instalable en dispositivos Android/iOS como una app nativa.
-- 🌑 **Dark Mode:** Interfaz optimizada para uso en carretera.
-
-## Instalación Local
-1. Clona este repositorio.
-2. Ejecuta `npm install`.
-3. Ejecuta `npm start`.
-
-## Despliegue en Hostinger
-1. Genera el build: `npm run build`.
-2. Sube el contenido de la carpeta `dist` al servidor.
-3. Configura el `.htaccess` para manejar el enrutamiento de React.
