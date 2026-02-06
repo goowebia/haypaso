@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, CheckCircle2, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ReportType } from '../types';
 
@@ -36,7 +36,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setMedia([{ type, data: reader.result as string }]); // Solo una pieza de evidencia principal para el diseño side-by-side
+      setMedia([{ type, data: reader.result as string }]);
     };
     reader.readAsDataURL(file);
   };
@@ -48,7 +48,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('reportes').insert([{
+      const payload = {
         tipo: selectedType,
         descripcion: comment.trim() || `Reporte de ${selectedType}`,
         fotos: media.filter(m => m.type === 'image').map(m => m.data),
@@ -56,20 +56,21 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         latitud: coords.lat,
         longitud: coords.lng,
         estatus: 'activo'
-      }]);
+      };
+
+      const { error } = await supabase.from('reportes').insert([payload]);
 
       if (error) throw error;
 
       setShowToast(true);
       
-      // Esperar un momento para que el usuario vea el éxito y cerrar
       setTimeout(() => {
-        onClose(true); // Esto activará panelOpen en App.tsx
+        onClose(true);
       }, 1500);
 
     } catch (err) {
-      console.error("Error enviando:", err);
-      alert("No se pudo guardar el reporte. Verifica tu conexión.");
+      console.error("Error enviando reporte:", err);
+      alert("Error al guardar. Verifica que la tabla en Supabase sea correcta.");
       setIsSubmitting(false);
     }
   };
@@ -87,131 +88,129 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   ];
 
   return (
-    <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-slate-700/50 rounded-[40px]">
-      {/* Success Overlay */}
+    <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
+      {/* Éxito - Pantalla Completa Verde */}
       {showToast && (
-        <div className="absolute inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
-          <CheckCircle2 size={80} className="mb-4 animate-bounce" />
-          <h3 className="text-2xl font-black italic">¡REPORTE ENVIADO!</h3>
-          <p className="font-bold opacity-80 uppercase text-xs tracking-widest mt-2">Sincronizando con otros conductores...</p>
+        <div className="absolute inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in fade-in duration-300">
+          <div className="bg-white/20 p-6 rounded-full mb-6">
+            <CheckCircle2 size={100} strokeWidth={2.5} />
+          </div>
+          <h3 className="text-3xl font-black italic tracking-tighter">¡LISTO!</h3>
+          <p className="font-bold opacity-80 uppercase text-[10px] tracking-[0.4em] mt-4">Reporte sincronizado</p>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-2xl font-black text-white italic tracking-tighter leading-none">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Selecciona el incidente</p>
+          <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Toca el incidente ocurrido</p>
         </div>
-        <button onClick={() => onClose(false)} className="p-2 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform">
+        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform hover:bg-slate-700">
           <X size={24} />
         </button>
       </div>
 
-      {/* Categorías (Grid 3x3 compacto) */}
-      <div className="grid grid-cols-3 gap-2 mb-6">
+      {/* Grid Categorías */}
+      <div className="grid grid-cols-3 gap-2.5 mb-6">
         {categories.map((cat) => (
           <button
             key={cat.label}
             onClick={() => setSelectedType(cat.label)}
-            className={`flex flex-col items-center justify-center p-3 rounded-2xl border-b-2 transition-all active:scale-95 ${
+            className={`flex flex-col items-center justify-center p-4 rounded-3xl border-b-[6px] transition-all active:scale-95 ${
               selectedType === cat.label 
-                ? `${cat.color} border-black/20 scale-105 shadow-xl shadow-${cat.color.split('-')[1]}-400/20` 
+                ? `${cat.color} border-black/20 scale-105 shadow-2xl shadow-${cat.color.split('-')[1]}-400/40` 
                 : 'bg-slate-800/40 border-slate-900 text-slate-500'
             }`}
           >
-            <cat.icon size={18} className={selectedType === cat.label ? "text-slate-900" : "text-slate-500"} />
-            <span className={`text-[8px] font-black uppercase text-center mt-1 leading-none ${selectedType === cat.label ? "text-slate-900" : ""}`}>
+            <cat.icon size={22} className={selectedType === cat.label ? "text-slate-900" : "text-slate-500"} />
+            <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-slate-900" : ""}`}>
               {cat.label}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Multimedia & Comentario */}
+      {/* Evidencia & Comentario Side by Side */}
       <div className="space-y-4 mb-6">
-        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest block text-center">Evidencia opcional</label>
-        
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center gap-2 bg-slate-800/80 border border-slate-700 py-4 rounded-3xl text-slate-300 font-black text-[10px] uppercase active:scale-95 transition-all"
+            className="flex items-center justify-center gap-3 bg-slate-800/80 border-2 border-slate-700/50 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all hover:border-yellow-400"
           >
-            <Camera size={18} className="text-yellow-400" />
-            Tomar Foto
+            <Camera size={20} className="text-yellow-400" />
+            Foto
           </button>
           <button 
             onClick={() => videoInputRef.current?.click()}
-            className="flex items-center justify-center gap-2 bg-slate-800/80 border border-slate-700 py-4 rounded-3xl text-slate-300 font-black text-[10px] uppercase active:scale-95 transition-all"
+            className="flex items-center justify-center gap-3 bg-slate-800/80 border-2 border-slate-700/50 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all hover:border-red-500"
           >
-            <Video size={18} className="text-red-500" />
-            Video (30s)
+            <Video size={20} className="text-red-500" />
+            Video
           </button>
         </div>
 
         <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
         <input type="file" ref={videoInputRef} accept="video/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
-        {/* Sección de Comentario al lado de la Foto */}
         {(selectedType || media.length > 0) && (
-          <div className="flex gap-3 bg-slate-900/50 p-3 rounded-[32px] border border-slate-800 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50 animate-in slide-in-from-bottom-4 duration-300">
             {media.length > 0 ? (
-              <div className="relative w-28 h-28 shrink-0">
-                <div className="w-full h-full rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-950 shadow-inner">
+              <div className="relative w-32 h-32 shrink-0">
+                <div className="w-full h-full rounded-3xl overflow-hidden border-2 border-slate-700 bg-black shadow-2xl">
                   {media[0].type === 'image' ? (
                     <img src={media[0].data} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-red-500/10">
-                      <Video size={24} className="text-red-500" />
-                      <span className="text-[8px] font-black text-red-500">VIDEO</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-red-500/5">
+                      <Video size={32} className="text-red-500" />
+                      <span className="text-[9px] font-black text-red-500 uppercase">Video</span>
                     </div>
                   )}
                 </div>
-                <button onClick={removeMedia} className="absolute -top-2 -right-2 bg-red-600 text-white p-1.5 rounded-full shadow-lg border-2 border-slate-900">
-                  <X size={12} strokeWidth={3} />
+                <button onClick={removeMedia} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90">
+                  <X size={14} strokeWidth={4} />
                 </button>
               </div>
             ) : (
-              <div className="w-28 h-28 shrink-0 rounded-2xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[8px] font-black">
-                SIN MEDIA
+              <div className="w-32 h-32 shrink-0 rounded-3xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[10px] font-black tracking-widest uppercase">
+                Evidencia
               </div>
             )}
             
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="¿Algún detalle extra? (opcional)"
-              className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-28"
+              placeholder="¿Qué más debemos saber? (opcional)"
+              className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-32 leading-relaxed"
             />
           </div>
         )}
       </div>
 
-      {/* Footer & Big Button */}
-      <div className="mt-auto">
+      {/* Footer & Submit */}
+      <div className="mt-auto pt-2">
         <div className="flex items-center justify-between mb-4 px-2">
-          <div className="flex items-center gap-2 text-slate-500 text-[9px] font-black uppercase tracking-widest">
-            <MapPin size={12} className={coords ? "text-emerald-500" : "animate-pulse"} />
-            {coords ? "GPS ACTIVADO" : "OBTENIENDO GPS..."}
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
+            <MapPin size={14} className={coords ? "text-emerald-500" : "text-red-500 animate-pulse"} />
+            {coords ? "Ubicación fijada" : "Esperando GPS..."}
           </div>
-          {!selectedType && <div className="text-red-500 text-[9px] font-black uppercase animate-pulse italic">Selecciona incidente</div>}
         </div>
 
         <button
           onClick={executeSend}
           disabled={!selectedType || isSubmitting || !coords}
-          className={`w-full py-7 rounded-[35px] font-black uppercase tracking-[0.25em] flex items-center justify-center gap-4 transition-all duration-300 shadow-2xl ${
+          className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all duration-300 shadow-2xl ${
             !selectedType || isSubmitting || !coords
               ? 'bg-slate-800 text-slate-600 grayscale'
-              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/20 active:scale-95'
+              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/30 active:scale-95'
           }`}
         >
           {isSubmitting ? (
-            <Loader2 size={28} className="animate-spin" />
+            <Loader2 size={32} className="animate-spin" />
           ) : (
             <>
-              <Send size={24} strokeWidth={3} />
-              ENVIAR REPORTE
+              <Send size={28} strokeWidth={4} />
+              ENVIAR AHORA
             </>
           )}
         </button>
