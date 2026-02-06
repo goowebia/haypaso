@@ -13,8 +13,7 @@ export interface Report {
   created_at: string;
   tipo: ReportType;
   descripcion: string;
-  foto_url?: string;
-  video_url?: string;
+  fotos?: string[]; // Soporte para múltiples fotos
   latitud: number;
   longitud: number;
   estatus: ReportStatus;
