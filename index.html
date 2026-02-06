@@ -16,7 +16,7 @@
             padding: 0; 
             background-color: #0f172a; 
             overflow: hidden;
-            position: fixed; /* Evita scroll elástico en iOS */
+            position: fixed; 
         }
         #root {
             height: 100dvh;
@@ -25,16 +25,21 @@
         .leaflet-container { 
             height: 100% !important; 
             width: 100% !important; 
-            background: #0f172a !important;
+            background: #e5e7eb !important; /* Fondo gris claro mientras carga Google Maps */
             z-index: 1;
         }
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         
         .leaflet-marker-icon { border: none !important; background: none !important; }
         
+        @keyframes pulse-gps {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.2); opacity: 0.8; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .gps-marker {
+          animation: pulse-gps 2s infinite ease-in-out;
+        }
+
         .leaflet-zoom-animated {
             transition-duration: 400ms !important;
         }
