@@ -122,15 +122,15 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         {categories.map((cat) => (
           <button
             key={cat.label}
-            onClick={() => setSelectedType(cat.label)}
+            onClick={() => setSelectedType(selectedType === cat.label ? null : cat.label)}
             className={`flex flex-col items-center justify-center p-4 rounded-3xl border-b-[6px] transition-all active:scale-95 ${
               selectedType === cat.label 
                 ? `${cat.color} border-black/20 scale-105 shadow-2xl shadow-${cat.color.split('-')[1]}-400/40` 
                 : 'bg-slate-800/40 border-slate-900 text-slate-500 opacity-60'
             }`}
           >
-            <cat.icon size={22} className={selectedType === cat.label ? "text-slate-900" : "text-slate-500"} />
-            <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-slate-900" : ""}`}>
+            <cat.icon size={22} className={selectedType === cat.label ? "text-white" : "text-slate-500"} />
+            <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-white" : ""}`}>
               {cat.label}
             </span>
           </button>
