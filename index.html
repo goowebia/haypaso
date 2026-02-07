@@ -5,6 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Hay Paso - Reporte de Tráfico</title>
+    
+    <!-- PWA Primary Meta Tags -->
+    <meta name="theme-color" content="#facc15">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Hay Paso">
+    
+    <!-- iOS / Safari Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hay Paso">
+    <link rel="apple-touch-icon" href="https://picsum.photos/180/180">
+    
     <link rel="manifest" href="/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -25,7 +37,7 @@
         .leaflet-container { 
             height: 100% !important; 
             width: 100% !important; 
-            background: #e5e7eb !important; /* Fondo gris claro mientras carga Google Maps */
+            background: #e5e7eb !important; 
             z-index: 1;
         }
         
@@ -42,6 +54,11 @@
 
         .leaflet-zoom-animated {
             transition-duration: 400ms !important;
+        }
+
+        /* Prevent overscroll bounce in Safari */
+        body {
+            overscroll-behavior-y: none;
         }
     </style>
     
@@ -69,5 +86,14 @@
 <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.log('SW registration failed: ', err);
+          });
+        });
+      }
+    </script>
 </body>
 </html>

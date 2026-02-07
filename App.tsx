@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, WifiOff } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 
@@ -22,6 +22,11 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   
+  // PWA Installation
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
   // Usuarios en vivo (Presence)
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
   
@@ -62,6 +67,37 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // PWA Logic
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Solo mostrar si no se ha ignorado antes en esta sesión y no estamos en standalone
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsStandalone(true);
+    }
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    }
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+  };
+
   // Manejo de Presence (Usuarios en Vivo)
   useEffect(() => {
     const channel = supabase.channel('online-users', {
@@ -78,7 +114,7 @@ const App: React.FC = () => {
         const users: Record<string, { lat: number, lng: number }> = {};
         
         Object.keys(newState).forEach((key) => {
-          if (key === myId) return; // No mostrarse a sí mismo como puntito amarillo
+          if (key === myId) return;
           const userPresence = newState[key][0] as any;
           if (userPresence.lat && userPresence.lng) {
             users[key] = { lat: userPresence.lat, lng: userPresence.lng };
@@ -206,9 +242,38 @@ const App: React.FC = () => {
 
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
+      
+      {/* Banner de Instalación (Android) */}
+      {showInstallBanner && !isStandalone && (
+        <div className="fixed bottom-28 left-4 right-4 z-[100] animate-in slide-in-from-bottom duration-500">
+          <div className="bg-slate-800 border-2 border-yellow-400/50 p-4 rounded-3xl shadow-2xl flex items-center justify-between backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <div className="bg-yellow-400 p-2 rounded-xl text-slate-900">
+                <Download size={20} />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-tight text-white">Instalar App en el inicio</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Acceso rápido y offline</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleInstallClick}
+                className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+              >
+                Instalar
+              </button>
+              <button onClick={() => setShowInstallBanner(false)} className="p-2 text-slate-500">
+                <CloseIcon size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sistema de Notificaciones Flotantes */}
       {bgUploadStatus !== 'idle' && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
             bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-yellow-400' : 
             bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' :
@@ -218,10 +283,10 @@ const App: React.FC = () => {
               <><Loader2 className="animate-spin text-yellow-400" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Enviando...</span></>
             )}
             {bgUploadStatus === 'offline' && (
-              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Sin señal. Se enviará al recuperar conexión.</span></>
+              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Modo Offline. Guardado.</span></>
             )}
             {bgUploadStatus === 'success' && (
-              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte enviado con éxito</span></>
+              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte enviado</span></>
             )}
           </div>
         </div>
