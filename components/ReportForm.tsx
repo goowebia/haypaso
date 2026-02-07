@@ -1,81 +1,71 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, CheckCircle2, Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, Loader2 } from 'lucide-react';
 import { ReportType } from '../types';
+import imageCompression from 'browser-image-compression';
 
 interface ReportFormProps {
-  onClose: (didSend?: boolean) => void;
+  onClose: (didSend: boolean, payload?: any) => void;
 }
 
 const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [comment, setComment] = useState('');
-  const [media, setMedia] = useState<{ type: 'image' | 'video'; data: string }[]>([]);
+  const [media, setMedia] = useState<{ type: 'image' | 'video'; data: string; file?: File }[]>([]);
   const [coords, setCoords] = useState<{ lat: number, lng: number } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showToast, setShowToast] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const getPos = () => {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.error("Error GPS:", err),
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    };
-    getPos();
+    // Intentar obtener GPS pero no bloquear al usuario
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => console.warn("GPS no disponible aún, usando respaldo al enviar."),
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
   }, []);
 
-  const handleMedia = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+  const handleMedia = async (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setMedia([{ type, data: reader.result as string }]);
-    };
-    reader.readAsDataURL(file);
+    if (type === 'image') {
+      setIsCompressing(true);
+      try {
+        const compressedFile = await imageCompression(file, { maxSizeMB: 0.4, maxWidthOrHeight: 1200, useWebWorker: true });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setMedia([{ type, data: reader.result as string, file: compressedFile }]);
+          setIsCompressing(false);
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        setIsCompressing(false);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onloadend = () => setMedia([{ type, data: reader.result as string, file }]);
+      reader.readAsDataURL(file);
+    }
   };
 
-  const removeMedia = () => setMedia([]);
+  const handleSend = () => {
+    // Si no hay categoría, ni comentario, ni media, no hacer nada
+    if (!selectedType && comment.trim().length === 0 && media.length === 0) return;
 
-  const executeSend = async () => {
-    // Si no hay tipo seleccionado Y no hay media ni comentario, no enviamos nada.
-    const hasEvidence = media.length > 0 || comment.trim().length > 0;
-    if ((!selectedType && !hasEvidence) || isSubmitting || !coords) return;
+    const payload = {
+      tipo: selectedType || 'Tráfico Lento',
+      descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Evidencia enviada"),
+      fotos: media.filter(m => m.type === 'image').map(m => m.data),
+      video_url: media.find(m => m.type === 'video')?.data || null,
+      latitud: coords?.lat || null, // App.tsx manejará el respaldo si es null
+      longitud: coords?.lng || null,
+      estatus: 'activo'
+    };
 
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        // Si el usuario no presionó los botones de arriba, asignamos "Tráfico Lento" por defecto
-        tipo: selectedType || 'Tráfico Lento',
-        descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Reporte rápido con evidencia"),
-        fotos: media.filter(m => m.type === 'image').map(m => m.data),
-        video_url: media.find(m => m.type === 'video')?.data || null,
-        latitud: coords.lat,
-        longitud: coords.lng,
-        estatus: 'activo'
-      };
-
-      const { error } = await supabase.from('reportes').insert([payload]);
-
-      if (error) throw error;
-
-      setShowToast(true);
-      
-      setTimeout(() => {
-        onClose(true);
-      }, 1500);
-
-    } catch (err) {
-      console.error("Error enviando reporte:", err);
-      alert("Error al guardar. Verifica tu conexión.");
-      setIsSubmitting(false);
-    }
+    onClose(true, payload);
   };
 
   const categories: { label: ReportType; icon: any; color: string }[] = [
@@ -90,34 +80,21 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     { label: 'Clima', icon: AlertOctagon, color: 'bg-cyan-500' },
   ];
 
-  // El botón se habilita si hay categoría O si hay evidencia (foto/comentario)
-  const canSubmit = (selectedType !== null || media.length > 0 || comment.trim().length > 0) && coords && !isSubmitting;
+  // Habilitar si hay categoría, texto o media
+  const canSubmit = (selectedType !== null || comment.trim().length > 0 || media.length > 0) && !isCompressing;
 
   return (
     <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
-      {/* Éxito - Pantalla Completa Verde */}
-      {showToast && (
-        <div className="absolute inset-0 z-[300] bg-emerald-500 flex flex-col items-center justify-center text-white animate-in zoom-in fade-in duration-300">
-          <div className="bg-white/20 p-6 rounded-full mb-6">
-            <CheckCircle2 size={100} strokeWidth={2.5} />
-          </div>
-          <h3 className="text-3xl font-black italic tracking-tighter">¡LISTO!</h3>
-          <p className="font-bold opacity-80 uppercase text-[10px] tracking-[0.4em] mt-4">Reporte sincronizado</p>
-        </div>
-      )}
-
-      {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Elige categoría o sube evidencia</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Compresión activa - Envío inmediato</p>
         </div>
-        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform hover:bg-slate-700">
+        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform">
           <X size={24} />
         </button>
       </div>
 
-      {/* Grid Categorías */}
       <div className="grid grid-cols-3 gap-2.5 mb-6">
         {categories.map((cat) => (
           <button
@@ -130,33 +107,21 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
             }`}
           >
             <cat.icon size={22} className={selectedType === cat.label ? "text-white" : "text-slate-500"} />
-            <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-white" : ""}`}>
+            <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-white" : "text-slate-400"}`}>
               {cat.label}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Evidencia & Comentario */}
       <div className="space-y-4 mb-6">
         <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all ${
-              media.some(m => m.type === 'image') ? 'bg-yellow-400/20 border-yellow-400' : 'bg-slate-800/80 border-slate-700/50 hover:border-yellow-400'
-            }`}
-          >
-            <Camera size={20} className={media.some(m => m.type === 'image') ? 'text-yellow-400' : 'text-slate-500'} />
-            Foto
+          <button onClick={() => fileInputRef.current?.click()} className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase transition-all ${media.some(m => m.type === 'image') ? 'bg-yellow-400/20 border-yellow-400 text-white' : 'bg-slate-800/80 border-slate-700/50 text-slate-500'}`}>
+            {isCompressing ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
+            {isCompressing ? 'PROCESANDO...' : 'Foto'}
           </button>
-          <button 
-            onClick={() => videoInputRef.current?.click()}
-            className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all ${
-              media.some(m => m.type === 'video') ? 'bg-red-500/20 border-red-500' : 'bg-slate-800/80 border-slate-700/50 hover:border-red-500'
-            }`}
-          >
-            <Video size={20} className={media.some(m => m.type === 'video') ? 'text-red-500' : 'text-slate-500'} />
-            Video
+          <button onClick={() => videoInputRef.current?.click()} className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase transition-all ${media.some(m => m.type === 'video') ? 'bg-red-500/20 border-red-500 text-white' : 'bg-slate-800/80 border-slate-700/50 text-slate-500'}`}>
+            <Video size={20} /> Video
           </button>
         </div>
 
@@ -164,66 +129,25 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <input type="file" ref={videoInputRef} accept="video/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
         <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50">
-          {media.length > 0 ? (
-            <div className="relative w-32 h-32 shrink-0">
-              <div className="w-full h-full rounded-3xl overflow-hidden border-2 border-slate-700 bg-black shadow-2xl">
-                {media[0].type === 'image' ? (
-                  <img src={media[0].data} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-red-500/5">
-                    <Video size={32} className="text-red-500" />
-                    <span className="text-[9px] font-black text-red-500 uppercase">Video</span>
-                  </div>
-                )}
-              </div>
-              <button onClick={removeMedia} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90">
-                <X size={14} strokeWidth={4} />
-              </button>
-            </div>
-          ) : (
-            <div className="w-32 h-32 shrink-0 rounded-3xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[10px] font-black tracking-widest uppercase">
-              Evidencia
-            </div>
-          )}
-          
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Escribe un comentario..."
-            className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-32 leading-relaxed"
-          />
+          <div className="relative w-32 h-32 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
+            {media.length > 0 ? (
+              <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Sin Evidencia</span>}
+          </div>
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario (opcional)..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32 placeholder:text-slate-700" />
         </div>
       </div>
 
-      {/* Footer & Submit */}
-      <div className="mt-auto pt-2">
-        <div className="flex items-center justify-between mb-4 px-2">
-          <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
-            <MapPin size={14} className={coords ? "text-emerald-500" : "text-red-500 animate-pulse"} />
-            {coords ? "GPS LISTO" : "Esperando GPS..."}
-          </div>
-          {!selectedType && (media.length > 0 || comment.length > 0) && (
-            <span className="text-yellow-400 text-[8px] font-black uppercase tracking-tighter">Se enviará como Tráfico Lento</span>
-          )}
-        </div>
-
+      <div className="mt-auto">
         <button
-          onClick={executeSend}
+          onClick={handleSend}
           disabled={!canSubmit}
-          className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all duration-300 shadow-2xl ${
-            !canSubmit
-              ? 'bg-slate-800 text-slate-600 grayscale'
-              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/30 active:scale-95 animate-in fade-in'
+          className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all shadow-2xl ${
+            !canSubmit ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-yellow-400 text-slate-900 active:scale-95 hover:brightness-110 shadow-yellow-400/20'
           }`}
         >
-          {isSubmitting ? (
-            <Loader2 size={32} className="animate-spin" />
-          ) : (
-            <>
-              <Send size={28} strokeWidth={4} />
-              ENVIAR AHORA
-            </>
-          )}
+          <Send size={28} strokeWidth={4} />
+          ENVIAR AHORA
         </button>
       </div>
     </div>

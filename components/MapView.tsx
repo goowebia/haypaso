@@ -22,23 +22,22 @@ const MapController = ({ center, zoom, onInteraction }: { center: [number, numbe
   });
 
   useEffect(() => {
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
+    map.invalidateSize();
   }, [map]);
 
   useEffect(() => {
-    map.setView(center, zoom, {
+    // Seguimiento más suave: solo centrar si el usuario no ha interactuado manualmente
+    map.panTo(center, {
       animate: true,
-      duration: 0.8
+      duration: 1.5, // Más lento para fluidez
+      easeLinearity: 0.25
     });
-  }, [center, zoom, map]);
+  }, [center, map]);
 
   return null;
 };
 
 const getIcon = (type: string, votosSigue: number = 0) => {
-  // REGLA DE ALERTA: Triángulo grande para 5+ votos
   if (votosSigue >= 5) {
     const alertIcon = `
       <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
@@ -84,7 +83,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
   useEffect(() => {
     const interval = setInterval(() => {
       setTrafficKey(Date.now());
-    }, 5 * 60 * 1000); 
+    }, 60000); // Tráfico de Google Maps se refresca cada minuto
     return () => clearInterval(interval);
   }, []);
 
