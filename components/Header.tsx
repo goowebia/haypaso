@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Bell, BellOff, BellRing, MessageSquare } from 'lucide-react';
+import { Play, Bell, BellOff, BellRing, MessageSquare, Volume2, VolumeX } from 'lucide-react';
 
 interface HeaderProps {
   onToggleChat: () => void;
   hasUnread?: boolean;
+  soundEnabled: boolean;
+  onToggleSound: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
+const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, onToggleSound }) => {
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
 
   useEffect(() => {
@@ -20,10 +22,8 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
       alert("Tu navegador no soporta notificaciones.");
       return;
     }
-
     const permission = await Notification.requestPermission();
     setNotifStatus(permission);
-    
     if (permission === 'granted') {
       new Notification("¡Notificaciones activadas!", {
         body: "Te avisaremos sobre accidentes pesados y obras en tiempo real.",
@@ -39,34 +39,32 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
           <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />
         </div>
         <div>
-          <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase italic">
-            Hay Paso
-          </h1>
-          <p className="text-[9px] font-black text-[#FFCC00] uppercase tracking-widest leading-none mt-1">
-            EN VIVO
-          </p>
+          <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase italic">Hay Paso</h1>
+          <p className="text-[9px] font-black text-[#FFCC00] uppercase tracking-widest leading-none mt-1">EN VIVO</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <button 
+          onClick={onToggleSound}
+          className={`p-2.5 rounded-full transition-all active:scale-90 border border-white/5 ${soundEnabled ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}
+          title={soundEnabled ? "Silenciar" : "Activar Sonido"}
+        >
+          {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
+
         <button 
           onClick={onToggleChat}
           className="relative p-2.5 bg-slate-800 text-slate-300 rounded-full active:scale-90 transition-all border border-white/5"
         >
           <MessageSquare size={20} />
-          {hasUnread && (
-            <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-slate-900 rounded-full"></span>
-          )}
+          {hasUnread && (<span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-slate-900 rounded-full"></span>)}
         </button>
 
         <button 
           onClick={requestPermission}
           className={`p-2.5 rounded-full transition-all active:scale-90 ${
-            notifStatus === 'granted' 
-              ? 'bg-[#FFCC00] text-slate-900 shadow-lg shadow-[#FFCC00]/20' 
-              : notifStatus === 'denied'
-                ? 'bg-red-500/10 text-red-500'
-                : 'bg-slate-800 text-slate-400'
+            notifStatus === 'granted' ? 'bg-[#FFCC00] text-slate-900 shadow-lg shadow-[#FFCC00]/20' : notifStatus === 'denied' ? 'bg-red-500/10 text-red-500' : 'bg-slate-800 text-slate-400'
           }`}
         >
           {notifStatus === 'granted' ? <BellRing size={20} /> : notifStatus === 'denied' ? <BellOff size={20} /> : <Bell size={20} />}

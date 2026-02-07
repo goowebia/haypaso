@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Report, ReportType } from '../types';
 import { 
@@ -10,6 +9,7 @@ import { supabase, getUserId } from '../lib/supabase';
 
 interface ReportCardProps {
   report: Report;
+  isNew?: boolean;
   onClick: (lat: number, lng: number) => void;
 }
 
@@ -44,7 +44,7 @@ const getCategoryConfig = (type: ReportType) => {
   }
 };
 
-const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
+const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [voted, setVoted] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
@@ -86,12 +86,28 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
     <>
       <div 
         onClick={() => onClick(report.latitud, report.longitud)}
-        className={`bg-slate-800/60 border rounded-2xl p-3 mb-2.5 active:scale-[0.98] transition-all cursor-pointer shadow-md ${
+        className={`bg-slate-800/60 border rounded-2xl p-3 mb-2.5 active:scale-[0.98] transition-all cursor-pointer shadow-md relative overflow-hidden ${
+          isNew ? 'animate-[pulse-flash_2s_infinite] border-[#FFCC00]' : 
           isAlert ? 'border-yellow-400/50 bg-yellow-400/5' : 'border-slate-700/50'
         }`}
       >
+        <style>
+          {`
+            @keyframes pulse-flash {
+              0% { background-color: rgba(255, 204, 0, 0.05); }
+              50% { background-color: rgba(255, 204, 0, 0.2); }
+              100% { background-color: rgba(255, 204, 0, 0.05); }
+            }
+          `}
+        </style>
+        
+        {isNew && (
+          <div className="absolute top-0 left-0 bg-[#FFCC00] text-slate-900 px-2 py-0.5 text-[8px] font-black uppercase rounded-br-lg shadow-lg">
+            Nuevo
+          </div>
+        )}
+
         <div className="flex gap-4">
-          {/* Contenido Izquierdo (Texto) */}
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5">
               <div className="flex items-center gap-2 min-w-0">
@@ -110,12 +126,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
               </div>
             </div>
 
-            {/* Descripción legible: 15px-16px, Blanco Puro, Peso 500 */}
             <p className="text-[#f8f9fa] text-[15px] font-medium leading-snug line-clamp-2 mb-3">
               {report.descripcion || 'Sin detalles adicionales.'}
             </p>
 
-            {/* Botones Compactos */}
             <div className="flex gap-2">
               <button 
                 onClick={(e) => handleVote(e, 'sigue')}
@@ -144,7 +158,6 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
             </div>
           </div>
 
-          {/* Miniatura Derecha */}
           {hasImage && (
             <div 
               onClick={(e) => { e.stopPropagation(); setSelectedImage(report.fotos![0]); }}

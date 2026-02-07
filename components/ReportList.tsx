@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Report } from '../types';
 import ReportCard from './ReportCard';
@@ -7,10 +6,11 @@ import { CheckCircle } from 'lucide-react';
 interface ReportListProps {
   reports: Report[];
   loading: boolean;
+  highlightId?: string | null;
   onReportClick: (lat: number, lng: number) => void;
 }
 
-const ReportList: React.FC<ReportListProps> = ({ reports, loading, onReportClick }) => {
+const ReportList: React.FC<ReportListProps> = ({ reports, loading, highlightId, onReportClick }) => {
   if (loading && reports.length === 0) {
     return (
       <div className="p-8 flex flex-col items-center justify-center">
@@ -48,6 +48,7 @@ const ReportList: React.FC<ReportListProps> = ({ reports, loading, onReportClick
           <ReportCard 
             key={report.id} 
             report={report} 
+            isNew={highlightId === report.id}
             onClick={onReportClick}
           />
         ))}

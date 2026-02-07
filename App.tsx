@@ -6,9 +6,10 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
+const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -20,7 +21,12 @@ const App: React.FC = () => {
   const [mapZoom, setMapZoom] = useState(12);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   
+  // Real-time notifications
+  const [newReportToast, setNewReportToast] = useState<Report | null>(null);
+  const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
+
   // PWA Installation
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -32,7 +38,15 @@ const App: React.FC = () => {
   // Estados de carga y sincronización
   const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const myId = getUserId();
+
+  const playAlertSound = useCallback(() => {
+    if (soundEnabled && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.log("Audio blocked by browser", e));
+    }
+  }, [soundEnabled]);
 
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
@@ -66,23 +80,48 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Suscripción en Tiempo Real
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-reports')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, (payload) => {
+        const newReport = payload.new as Report;
+        // Solo agregar si no existe ya y es activo
+        setReports(prev => {
+          if (prev.find(r => r.id === newReport.id)) return prev;
+          const updated = [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev];
+          return updated;
+        });
+        
+        // Efectos de nuevo reporte
+        setNewReportToast(newReport);
+        setNewlyAddedId(newReport.id);
+        playAlertSound();
+        
+        // Limpiar toast y highlight después de unos segundos
+        setTimeout(() => setNewReportToast(null), 5000);
+        setTimeout(() => setNewlyAddedId(null), 10000);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [playAlertSound]);
+
   // PWA Logic
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Solo mostrar si no estamos ya en modo standalone
       if (!window.matchMedia('(display-mode: standalone)').matches) {
         setShowInstallBanner(true);
       }
     };
-
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
       setIsStandalone(true);
     }
-
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
@@ -90,28 +129,18 @@ const App: React.FC = () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    }
+    if (outcome === 'accepted') console.log('User accepted install');
     setDeferredPrompt(null);
     setShowInstallBanner(false);
   };
 
-  // Manejo de Presence (Usuarios en Vivo)
+  // Manejo de Presence
   useEffect(() => {
-    const channel = supabase.channel('online-users', {
-      config: {
-        presence: {
-          key: myId,
-        },
-      },
-    });
-
+    const channel = supabase.channel('online-users', { config: { presence: { key: myId } } });
     channel
       .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState();
         const users: Record<string, { lat: number, lng: number }> = {};
-        
         Object.keys(newState).forEach((key) => {
           if (key === myId) return;
           const userPresenceList = newState[key];
@@ -126,62 +155,42 @@ const App: React.FC = () => {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED' && userLocation) {
-          await channel.track({
-            lat: userLocation[0],
-            lng: userLocation[1],
-            online_at: new Date().toISOString(),
-          });
+          await channel.track({ lat: userLocation[0], lng: userLocation[1], online_at: new Date().toISOString() });
         }
       });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [userLocation, myId]);
 
-  // Procesar reportes guardados en offline
   const processPendingReports = useCallback(async () => {
     if (!navigator.onLine) return;
-    
     const stored = localStorage.getItem(PENDING_REPORTS_KEY);
     if (!stored) return;
-
     const pending = JSON.parse(stored);
     if (pending.length === 0) return;
-
     setBgUploadStatus('uploading');
     let successCount = 0;
-
     for (const payload of pending) {
       try {
         const { error } = await supabase.from('reportes').insert([payload]);
         if (!error) successCount++;
-      } catch (err) {
-        console.error("Error subiendo pendiente:", err);
-      }
+      } catch (err) { console.error("Error upload:", err); }
     }
-
     if (successCount > 0) {
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([]));
       setBgUploadStatus('success');
       fetchReports(true);
       setTimeout(() => setBgUploadStatus('idle'), 4000);
-    } else {
-      setBgUploadStatus('idle');
-    }
+    } else { setBgUploadStatus('idle'); }
   }, [fetchReports]);
 
-  // Manejador de envío (con soporte offline)
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
-    
     const finalPayload = {
       ...payload,
       latitud: payload.latitud || userLocation?.[0] || 19.2433,
       longitud: payload.longitud || userLocation?.[1] || -103.7247,
       created_at: new Date().toISOString()
     };
-
     if (!navigator.onLine) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
@@ -189,7 +198,6 @@ const App: React.FC = () => {
       setTimeout(() => setBgUploadStatus('idle'), 5000);
       return;
     }
-
     setBgUploadStatus('uploading');
     try {
       const { error } = await supabase.from('reportes').insert([finalPayload]);
@@ -208,15 +216,9 @@ const App: React.FC = () => {
     fetchReports();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchReports(true);
-    }, 30000);
-
-    const handleOnline = () => processPendingReports();
-    window.addEventListener('online', handleOnline);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('online', handleOnline);
-    };
+    }, 60000);
+    window.addEventListener('online', processPendingReports);
+    return () => { clearInterval(interval); window.removeEventListener('online', processPendingReports); };
   }, [fetchReports, processPendingReports]);
 
   useEffect(() => {
@@ -234,62 +236,58 @@ const App: React.FC = () => {
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser]);
 
-  const toggleFollow = () => {
-    if (userLocation) {
-      setFollowUser(true);
-      setMapCenter(userLocation);
-      setMapZoom(15);
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
-      
-      {/* Banner de Instalación */}
+      <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
+
+      {/* Toast de Nuevo Reporte Real-time */}
+      {newReportToast && (
+        <div 
+          onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }}
+          className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top fade-in duration-500 w-[90%] max-w-sm cursor-pointer"
+        >
+          <div className="bg-[#FFCC00] text-slate-900 px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(255,204,0,0.4)] border-2 border-white/20 flex items-center gap-4">
+            <div className="bg-slate-900 p-2 rounded-xl text-[#FFCC00]">
+              <AlertTriangle size={24} strokeWidth={3} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Nuevo Reporte</p>
+              <p className="text-sm font-black uppercase italic leading-tight">{newReportToast.tipo}</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase truncate max-w-[180px]">{newReportToast.descripcion || 'Sin detalles'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Instalación */}
       {showInstallBanner && !isStandalone && (
         <div className="fixed bottom-28 left-4 right-4 z-[100] animate-in slide-in-from-bottom duration-500">
           <div className="bg-slate-800 border-2 border-[#FFCC00]/50 p-4 rounded-3xl shadow-2xl flex items-center justify-between backdrop-blur-xl">
             <div className="flex items-center gap-3">
-              <div className="bg-[#FFCC00] p-2 rounded-xl text-slate-900 shadow-lg shadow-[#FFCC00]/20">
-                <Download size={20} />
-              </div>
+              <div className="bg-[#FFCC00] p-2 rounded-xl text-slate-900 shadow-lg shadow-[#FFCC00]/20"><Download size={20} /></div>
               <div>
                 <p className="text-xs font-black uppercase tracking-tight text-white">Instalar Hay Paso</p>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">Acceso directo y offline</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={handleInstallClick}
-                className="bg-[#FFCC00] text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-[#FFCC00]/20"
-              >
-                Instalar
-              </button>
-              <button onClick={() => setShowInstallBanner(false)} className="p-2 text-slate-500">
-                <CloseIcon size={18} />
-              </button>
+              <button onClick={handleInstallClick} className="bg-[#FFCC00] text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-[#FFCC00]/20">Instalar</button>
+              <button onClick={() => setShowInstallBanner(false)} className="p-2 text-slate-500"><CloseIcon size={18} /></button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Sistema de Notificaciones Flotantes */}
+      {/* Sincronización Background */}
       {bgUploadStatus !== 'idle' && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
             bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
-            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' :
-            'bg-emerald-500/90 border-emerald-400'
+            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' : 'bg-emerald-500/90 border-emerald-400'
           }`}>
-            {bgUploadStatus === 'uploading' && (
-              <><Loader2 className="animate-spin text-[#FFCC00]" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</span></>
-            )}
-            {bgUploadStatus === 'offline' && (
-              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Guardado Offline</span></>
-            )}
-            {bgUploadStatus === 'success' && (
-              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte Enviado</span></>
-            )}
+            {bgUploadStatus === 'uploading' && (<><Loader2 className="animate-spin text-[#FFCC00]" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</span></>)}
+            {bgUploadStatus === 'offline' && (<><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Guardado Offline</span></>)}
+            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte Enviado</span></>)}
           </div>
         </div>
       )}
@@ -306,7 +304,11 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute top-0 left-0 right-0 z-50">
-        <Header onToggleChat={() => setChatOpen(!chatOpen)} />
+        <Header 
+          onToggleChat={() => setChatOpen(!chatOpen)} 
+          soundEnabled={soundEnabled} 
+          onToggleSound={() => setSoundEnabled(!soundEnabled)} 
+        />
       </div>
 
       <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ease-in-out shadow-2xl ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -314,10 +316,9 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
-        <button onClick={toggleFollow} className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
+        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
-
         <button onClick={() => setShowForm(true)} className="bg-[#FFCC00] text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(255,204,0,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center">
           <Plus size={32} strokeWidth={4} />
         </button>
@@ -328,8 +329,13 @@ const App: React.FC = () => {
           <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3 shadow-inner" />
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'CERRAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
         </div>
-        <div className="flex-1 overflow-y-auto h-full px-1">
-          <ReportList reports={reports} loading={loading} onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(16.5); if (window.innerWidth < 768) setPanelOpen(false); }} />
+        <div className="flex-1 overflow-y-auto h-full px-1 scroll-smooth">
+          <ReportList 
+            reports={reports} 
+            loading={loading} 
+            highlightId={newlyAddedId}
+            onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(16.5); if (window.innerWidth < 768) setPanelOpen(false); }} 
+          />
           <div className="h-32" />
         </div>
       </div>
