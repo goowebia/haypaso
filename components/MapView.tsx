@@ -9,6 +9,7 @@ interface MapViewProps {
   center: [number, number];
   zoom: number;
   userLocation: [number, number] | null;
+  onlineUsers: Record<string, { lat: number, lng: number }>;
   onMapInteraction?: () => void;
 }
 
@@ -26,10 +27,9 @@ const MapController = ({ center, zoom, onInteraction }: { center: [number, numbe
   }, [map]);
 
   useEffect(() => {
-    // Seguimiento más suave: solo centrar si el usuario no ha interactuado manualmente
     map.panTo(center, {
       animate: true,
-      duration: 1.5, // Más lento para fluidez
+      duration: 1.5,
       easeLinearity: 0.25
     });
   }, [center, map]);
@@ -37,7 +37,7 @@ const MapController = ({ center, zoom, onInteraction }: { center: [number, numbe
   return null;
 };
 
-const getIcon = (type: string, votosSigue: number = 0) => {
+const getReportIcon = (type: string, votosSigue: number = 0) => {
   if (votosSigue >= 5) {
     const alertIcon = `
       <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
@@ -77,13 +77,30 @@ const getIcon = (type: string, votosSigue: number = 0) => {
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onMapInteraction }) => {
+// Icono pequeño de coche amarillo para otros usuarios
+const getLiveUserIcon = () => {
+  const carSvg = `
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="10" fill="#facc15" fill-opacity="0.8" stroke="white" stroke-width="1.5"/>
+      <path d="M17 11.5V14.5M7 11.5V14.5M10 17H14" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M6 11L7.5 7.5H16.5L18 11H6Z" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+    </svg>
+  `;
+  return L.divIcon({
+    className: 'live-user-marker',
+    html: carSvg,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
+const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onlineUsers, onMapInteraction }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTrafficKey(Date.now());
-    }, 60000); // Tráfico de Google Maps se refresca cada minuto
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -103,11 +120,22 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
       
       <MapController center={center} zoom={zoom} onInteraction={onMapInteraction} />
 
+      {/* Usuarios en vivo (otros compañeros) */}
+      {/* Fix: Explicitly cast Object.entries to resolve 'unknown' type inference on pos object */}
+      {(Object.entries(onlineUsers) as [string, { lat: number, lng: number }][]).map(([id, pos]) => (
+        <Marker 
+          key={id} 
+          position={[pos.lat, pos.lng]} 
+          icon={getLiveUserIcon()}
+          zIndexOffset={50} // Debajo de los reportes pero visible
+        />
+      ))}
+
       {reports.map((report) => (
         <Marker 
           key={report.id} 
           position={[report.latitud, report.longitud]}
-          icon={getIcon(report.tipo, report.votos_sigue)}
+          icon={getReportIcon(report.tipo, report.votos_sigue)}
           zIndexOffset={report.votos_sigue >= 5 ? 500 : 100}
         >
           <Popup closeButton={false}>

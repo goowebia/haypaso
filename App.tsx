@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, getUserId } from './lib/supabase';
 import { Report } from './types';
 import Header from './components/Header';
 import MapView from './components/MapView';
@@ -22,9 +22,13 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   
+  // Usuarios en vivo (Presence)
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
+  
   // Estados de carga y sincronización
   const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
+  const myId = getUserId();
 
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
@@ -57,6 +61,45 @@ const App: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  // Manejo de Presence (Usuarios en Vivo)
+  useEffect(() => {
+    const channel = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: myId,
+        },
+      },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const newState = channel.presenceState();
+        const users: Record<string, { lat: number, lng: number }> = {};
+        
+        Object.keys(newState).forEach((key) => {
+          if (key === myId) return; // No mostrarse a sí mismo como puntito amarillo
+          const userPresence = newState[key][0] as any;
+          if (userPresence.lat && userPresence.lng) {
+            users[key] = { lat: userPresence.lat, lng: userPresence.lng };
+          }
+        });
+        setOnlineUsers(users);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && userLocation) {
+          await channel.track({
+            lat: userLocation[0],
+            lng: userLocation[1],
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userLocation, myId]);
 
   // Procesar reportes guardados en offline
   const processPendingReports = useCallback(async () => {
@@ -94,12 +137,11 @@ const App: React.FC = () => {
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
     
-    // Inyectar ubicación de respaldo si es necesario
     const finalPayload = {
       ...payload,
       latitud: payload.latitud || userLocation?.[0] || 19.2433,
       longitud: payload.longitud || userLocation?.[1] || -103.7247,
-      created_at: new Date().toISOString() // Congelar tiempo real del reporte
+      created_at: new Date().toISOString()
     };
 
     if (!navigator.onLine) {
@@ -118,7 +160,6 @@ const App: React.FC = () => {
       fetchReports(true);
       setTimeout(() => setBgUploadStatus('idle'), 3000);
     } catch (err) {
-      // Si falla por red inestable, guardar en cola
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
       setBgUploadStatus('offline');
@@ -187,7 +228,14 @@ const App: React.FC = () => {
       )}
 
       <div className="absolute inset-0 z-0">
-        <MapView reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onMapInteraction={() => setFollowUser(false)} />
+        <MapView 
+          reports={reports} 
+          center={mapCenter} 
+          zoom={mapZoom} 
+          userLocation={userLocation} 
+          onlineUsers={onlineUsers}
+          onMapInteraction={() => setFollowUser(false)} 
+        />
       </div>
 
       <div className="absolute top-0 left-0 right-0 z-50">
