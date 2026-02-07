@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserId } from './lib/supabase';
 import { Report } from './types';
@@ -40,7 +39,8 @@ const App: React.FC = () => {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
   
   // Estados de carga y sincronización
-  const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'offline'>('idle');
+  // 'syncing' es el nuevo estado para cuando se procesan lotes offline con internet verificado
+  const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'syncing' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const myId = getUserId();
@@ -51,6 +51,24 @@ const App: React.FC = () => {
       audioRef.current.play().catch(e => console.log("Audio blocked by browser", e));
     }
   }, [soundEnabled]);
+
+  // Función para validar conexión real (Ping)
+  const checkRealConnection = async (): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      // Intentamos un fetch ligero a un recurso conocido
+      const response = await fetch('https://www.google.com/favicon.ico', { 
+        mode: 'no-cors', 
+        signal: controller.signal,
+        cache: 'no-store'
+      });
+      clearTimeout(timeoutId);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
@@ -83,6 +101,58 @@ const App: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  // Lógica de Sincronización de Pendientes (Offline -> Online)
+  const processPendingReports = useCallback(async () => {
+    const stored = localStorage.getItem(PENDING_REPORTS_KEY);
+    if (!stored) return;
+    
+    let pending = JSON.parse(stored);
+    if (pending.length === 0) return;
+
+    // 1. Verificación básica y verficación real de internet
+    if (!navigator.onLine) return;
+    const hasQualityInternet = await checkRealConnection();
+    if (!hasQualityInternet) return;
+
+    // 2. Feedback visual de sincronización (Verde)
+    setBgUploadStatus('syncing');
+
+    // 3. Prioridad: 'Camino Libre' primero para limpiar el mapa rápido
+    pending.sort((a: any, b: any) => (a.tipo === 'Camino Libre' ? -1 : 1));
+
+    let successCount = 0;
+    const currentQueue = [...pending];
+
+    for (const payload of pending) {
+      try {
+        const { error } = await supabase.from('reportes').insert([payload]);
+        if (!error) {
+          successCount++;
+          // 4. Limpieza Automática: Eliminar del array local tras éxito
+          const idx = currentQueue.indexOf(payload);
+          if (idx > -1) {
+            currentQueue.splice(idx, 1);
+            localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(currentQueue));
+          }
+        } else {
+          // Si hay error de red, paramos el bucle para reintentar en 30s
+          break;
+        }
+      } catch (err) {
+        console.error("Error upload item:", err);
+        break;
+      }
+    }
+
+    if (successCount > 0) {
+      setBgUploadStatus('success');
+      fetchReports(true);
+      setTimeout(() => setBgUploadStatus('idle'), 4000);
+    } else {
+      setBgUploadStatus('idle');
+    }
+  }, [fetchReports]);
 
   useEffect(() => {
     const channel = supabase
@@ -133,7 +203,10 @@ const App: React.FC = () => {
 
     const isClearRoad = payload.tipo === 'Camino Libre';
 
-    if (!navigator.onLine) {
+    // Verificación real antes de intentar envío directo
+    const isActuallyOnline = navigator.onLine && (await checkRealConnection());
+
+    if (!isActuallyOnline) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
       setBgUploadStatus('offline');
@@ -163,9 +236,23 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchReports();
-    const interval = setInterval(() => { if (document.visibilityState === 'visible') fetchReports(true); }, 60000);
-    return () => clearInterval(interval);
-  }, [fetchReports]);
+    // Reintento Agresivo: Cada 30s intentamos sincronizar si hay pendientes
+    const syncInterval = setInterval(() => {
+      processPendingReports();
+    }, 30000);
+
+    const refreshInterval = setInterval(() => { 
+      if (document.visibilityState === 'visible') fetchReports(true); 
+    }, 60000);
+
+    window.addEventListener('online', processPendingReports);
+
+    return () => {
+      clearInterval(syncInterval);
+      clearInterval(refreshInterval);
+      window.removeEventListener('online', processPendingReports);
+    };
+  }, [fetchReports, processPendingReports]);
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -239,16 +326,19 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Sincronización Background */}
+      {/* Sincronización Background Feedback */}
       {bgUploadStatus !== 'idle' && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
             bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
-            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' : 'bg-emerald-500/90 border-emerald-400'
+            bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' :
+            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' : 
+            'bg-emerald-500/90 border-emerald-400'
           }`}>
             {bgUploadStatus === 'uploading' && (<><Loader2 className="animate-spin text-[#FFCC00]" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</span></>)}
+            {bgUploadStatus === 'syncing' && (<><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">Sincronizando Reportes...</span></>)}
             {bgUploadStatus === 'offline' && (<><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Guardado Offline</span></>)}
-            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte Enviado</span></>)}
+            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Sincronizado con Éxito</span></>)}
           </div>
         </div>
       )}
