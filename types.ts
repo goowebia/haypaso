@@ -1,10 +1,10 @@
 
 export type ReportType = 
-  | 'Camino Libre'
+  | 'Libre'
   | 'Tráfico Lento' | 'Tráfico Pesado' | 'Alto Total' 
   | 'Accidente' | 'Obras' 
   | 'Policía Visible' | 'Policía Escondido' | 'Policía Contrario'
-  | 'Vehículo en Vía' | 'Vehículo en Lateral';
+  | 'Vehículo en Vía' | 'Vehículo en Lateral' | 'Clima';
 
 export type ReportStatus = 'activo' | 'despejado';
 export type VoteType = 'sigue' | 'despejado';

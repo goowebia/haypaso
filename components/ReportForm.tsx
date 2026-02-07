@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2 } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2, Cloud } from 'lucide-react';
 import { ReportType } from '../types';
 import imageCompression from 'browser-image-compression';
 
@@ -54,8 +54,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     if (!selectedType && comment.trim().length === 0 && media.length === 0) return;
 
     const payload = {
-      tipo: selectedType || 'Camino Libre',
-      descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Evidencia enviada"),
+      tipo: selectedType || 'Libre',
+      descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Reporte enviado"),
       fotos: media.filter(m => m.type === 'image').map(m => m.data),
       video_url: media.find(m => m.type === 'video')?.data || null,
       latitud: coords?.lat,
@@ -67,7 +67,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   };
 
   const categories: { label: ReportType; icon: any; color: string }[] = [
-    { label: 'Camino Libre', icon: CheckCircle2, color: 'bg-emerald-500' },
+    { label: 'Libre', icon: CheckCircle2, color: 'bg-emerald-500' },
     { label: 'Tráfico Lento', icon: Gauge, color: 'bg-yellow-400' },
     { label: 'Tráfico Pesado', icon: Gauge, color: 'bg-orange-500' },
     { label: 'Alto Total', icon: AlertOctagon, color: 'bg-red-600' },
@@ -79,21 +79,20 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   ];
 
   const canSubmit = (selectedType !== null || comment.trim().length > 0 || media.length > 0) && !isCompressing;
-  const isClearRoad = selectedType === 'Camino Libre';
+  const isClearRoad = selectedType === 'Libre';
 
   return (
     <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Subida mixta activa (Cámara/Galería)</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Panel de reporte vial</p>
         </div>
         <button onClick={() => onClose(false)} className="p-3 bg-slate-800/80 text-slate-400 rounded-full active:scale-90 border border-white/5">
           <X size={24} />
         </button>
       </div>
 
-      {/* Grid de 3x3 para evitar scroll */}
       <div className="grid grid-cols-3 gap-2.5 mb-6 overflow-hidden">
         {categories.map((cat) => (
           <button
@@ -117,7 +116,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             {isCompressing ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-            {isCompressing ? '...' : 'Evidencia'}
+            Foto
           </button>
           <button onClick={() => videoInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             <Video size={20} /> Video
@@ -131,9 +130,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           <div className="relative w-28 h-28 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
             {media.length > 0 ? (
               <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
-            ) : <span className="text-[10px] font-black text-slate-700 uppercase text-center px-2">Previsualización</span>}
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase text-center px-2">Vista Previa</span>}
           </div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario rápido..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-28" />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentario adicional..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-28" />
         </div>
       </div>
 

@@ -37,7 +37,6 @@ const MapController = ({ center, zoom, onInteraction }: { center: [number, numbe
   return null;
 };
 
-// CSS adicional para el marcador pulsante de nuevos reportes
 const pulsingMarkerStyle = `
   @keyframes marker-pulse {
     0% { transform: scale(1); opacity: 1; }
@@ -72,11 +71,11 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
   let color = '#facc15'; 
   if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
   if (type === 'Tráfico Pesado') color = '#f97316'; 
-  if (type === 'Camino Libre') color = '#10b981';
+  if (type === 'Libre') color = '#10b981';
   if (['Obras', 'Vehículo en Vía', 'Vehículo en Lateral'].includes(type)) color = '#64748b'; 
   if (type.startsWith('Policía')) color = '#3b82f6'; 
 
-  const isClear = type === 'Camino Libre';
+  const isClear = type === 'Libre';
 
   const alertIcon = votosSigue >= 5 ? `
     <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
@@ -130,7 +129,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
 
   useEffect(() => {
     const tInterval = setInterval(() => setTrafficKey(Date.now()), 60000);
-    const nInterval = setInterval(() => setNow(Date.now()), 30000); // Para actualizar el flag isNew
+    const nInterval = setInterval(() => setNow(Date.now()), 30000); 
     return () => { clearInterval(tInterval); clearInterval(nInterval); };
   }, []);
 
@@ -139,13 +138,9 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
       <TileLayer key={trafficKey} attribution='&copy; Google Maps' url={`https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}&t=${trafficKey}`} />
       <MapController center={center} zoom={zoom} onInteraction={onMapInteraction} />
       
-      {(Object.entries(onlineUsers) as [string, { lat: number, lng: number }][]).map(([id, pos]) => (
-        <Marker key={id} position={[pos.lat, pos.lng]} icon={getLiveUserIcon()} zIndexOffset={50} />
-      ))}
-
       {reports.map((report) => {
         const reportTime = new Date(report.created_at).getTime();
-        const isNew = (now - reportTime) < 120000; // Menos de 2 minutos
+        const isNew = (now - reportTime) < 120000; 
 
         return (
           <Marker 
@@ -156,7 +151,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
           >
             <Popup closeButton={false}>
               <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
-                <strong className={`block uppercase text-[10px] font-black ${report.tipo === 'Camino Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>{report.tipo}</strong>
+                <strong className={`block uppercase text-[10px] font-black ${report.tipo === 'Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>{report.tipo}</strong>
                 <div className="h-px bg-slate-700 my-1" />
                 <div className="text-[8px] text-slate-400 font-black uppercase">
                   {isNew ? '✨ RECIÉN REPORTADO' : report.votos_sigue >= 5 ? '⚠️ PELIGRO CONFIRMADO' : 'REPORTE VIAL'}

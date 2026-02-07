@@ -23,11 +23,10 @@ const formatTimeAgo = (dateString: string) => {
 
 const getCategoryConfig = (type: ReportType) => {
   switch (type) {
-    case 'Camino Libre':
+    case 'Libre':
       return { icon: CheckCircle2, color: 'text-emerald-500', fill: 'none' };
     case 'Accidente':
     case 'Alto Total':
-      // Fix: Removed 'Clima' as it is not present in ReportType
       return { icon: AlertOctagon, color: 'text-red-500', fill: 'none' };
     case 'Tráfico Pesado':
       return { icon: Gauge, color: 'text-orange-500', fill: 'none' };
@@ -81,7 +80,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   };
 
   const isAlert = localSigue >= 5;
-  const isClear = report.tipo === 'Camino Libre';
+  const isClear = report.tipo === 'Libre';
   const hasImage = report.fotos && report.fotos.length > 0;
   const config = getCategoryConfig(report.tipo);
   const CategoryIcon = isAlert ? AlertTriangle : config.icon;

@@ -24,26 +24,17 @@ const App: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   
-  // Real-time notifications
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
-
-  // Success message specific for "Camino Libre"
   const [showClearSuccess, setShowClearSuccess] = useState(false);
 
-  // PWA Installation
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
-  // Usuarios en vivo (Presence)
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
-  
-  // Estados de carga y sincronización
   const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'syncing' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const myId = getUserId();
 
   const playAlertSound = useCallback(() => {
     if (soundEnabled && audioRef.current) {
@@ -56,7 +47,6 @@ const App: React.FC = () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
-      // Usamos una URL que responda rápido para verificar conectividad real
       await fetch('https://www.google.com/favicon.ico', { 
         mode: 'no-cors', 
         signal: controller.signal,
@@ -72,7 +62,7 @@ const App: React.FC = () => {
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
-      // Filtro estricto de 24 horas: Borrado lógico en el cliente
+      // Filtro estricto de 24 horas para el historial
       const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       const { data: reportsData, error: reportsError } = await supabase
@@ -102,61 +92,41 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Lógica de Sincronización Forzada (Offline -> Online)
   const processPendingReports = useCallback(async () => {
     const stored = localStorage.getItem(PENDING_REPORTS_KEY);
-    if (!stored) {
-      setPendingCount(0);
-      return;
-    }
+    if (!stored) { setPendingCount(0); return; }
     
     let pending = JSON.parse(stored);
-    // Eliminar reportes con más de 24 horas que nunca se subieron
     const now = new Date();
-    pending = pending.filter((p: any) => {
-      const created = new Date(p.created_at);
-      return (now.getTime() - created.getTime()) < (24 * 60 * 60 * 1000);
-    });
+    // Limpieza de storage local: Eliminar lo que tenga +24h
+    pending = pending.filter((p: any) => (now.getTime() - new Date(p.created_at).getTime()) < (24 * 60 * 60 * 1000));
     localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
     setPendingCount(pending.length);
 
     if (pending.length === 0) return;
-
-    // Verificación de internet real
-    if (!navigator.onLine) return;
-    const isActuallyOnline = await checkRealConnection();
-    if (!isActuallyOnline) return;
+    if (!navigator.onLine || !(await checkRealConnection())) return;
 
     setBgUploadStatus('syncing');
+    // Prioridad: Reportes 'Libre' se envían primero
+    pending.sort((a: any, b: any) => (a.tipo === 'Libre' ? -1 : 1));
 
-    // Prioridad: 'Camino Libre' primero
-    pending.sort((a: any, b: any) => (a.tipo === 'Camino Libre' ? -1 : 1));
-
-    let successCount = 0;
     const currentQueue = [...pending];
-
     for (const payload of pending) {
       try {
-        const { error } = await supabase.from('reportes').insert([payload]);
-        // Solo borramos si el status es exitoso (error es null)
-        if (!error) {
-          successCount++;
+        const { error, status } = await supabase.from('reportes').insert([payload]);
+        // Solo borrar si Supabase confirma éxito (status 201)
+        if (!error && (status === 201 || status === 200)) {
           const idx = currentQueue.findIndex(p => p.created_at === payload.created_at && p.tipo === payload.tipo);
           if (idx > -1) {
             currentQueue.splice(idx, 1);
             localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(currentQueue));
             setPendingCount(currentQueue.length);
           }
-        } else {
-          // Si hay error (ej. timeout), paramos el lote para el siguiente ciclo
-          break;
-        }
-      } catch (err) {
-        break;
-      }
+        } else { break; }
+      } catch (err) { break; }
     }
 
-    if (successCount > 0) {
+    if (currentQueue.length < pending.length) {
       setBgUploadStatus('success');
       fetchReports(true);
       setTimeout(() => setBgUploadStatus('idle'), 3000);
@@ -166,46 +136,49 @@ const App: React.FC = () => {
   }, [fetchReports]);
 
   useEffect(() => {
+    const initApp = async () => {
+      // Limpieza automática vía RPC al iniciar
+      try {
+        await supabase.rpc('limpiar_reportes_viejos');
+      } catch (e) {
+        console.warn("RPC limpiar_reportes_viejos no disponible");
+      }
+      fetchReports();
+    };
+    initApp();
+  }, [fetchReports]);
+
+  useEffect(() => {
     const channel = supabase
       .channel('realtime-reports')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, (payload) => {
         const newReport = payload.new as Report;
-        // Ignorar reportes viejos que lleguen por delay de red
         const limit = new Date(Date.now() - 24 * 60 * 60 * 1000);
         if (new Date(newReport.created_at) < limit) return;
-
-        setReports(prev => {
-          if (prev.find(r => r.id === newReport.id)) return prev;
-          return [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev];
-        });
+        setReports(prev => prev.find(r => r.id === newReport.id) ? prev : [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev]);
         setNewReportToast(newReport);
         setNewlyAddedId(newReport.id);
         playAlertSound();
         setTimeout(() => setNewReportToast(null), 5000);
         setTimeout(() => setNewlyAddedId(null), 10000);
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reportes' }, async (payload) => {
+        // Limpieza de Bucket antes de que desaparezca el registro
+        const oldReport = payload.old as any;
+        if (oldReport?.fotos && oldReport.fotos.length > 0) {
+          const paths = oldReport.fotos.map((url: string) => {
+            const parts = url.split('/');
+            return parts[parts.length - 1];
+          }).filter(Boolean);
+          if (paths.length > 0) {
+            await supabase.storage.from('imagenes').remove(paths);
+          }
+        }
+        fetchReports(true);
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [playAlertSound]);
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      if (!window.matchMedia('(display-mode: standalone)').matches) setShowInstallBanner(true);
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) setIsStandalone(true);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-    setShowInstallBanner(false);
-  };
+  }, [playAlertSound, fetchReports]);
 
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
@@ -223,22 +196,23 @@ const App: React.FC = () => {
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
       setPendingCount(stored.length + 1);
       setBgUploadStatus('offline');
-      setTimeout(() => setBgUploadStatus('idle'), 2000);
+      setTimeout(() => setBgUploadStatus('idle'), 3000);
       return;
     }
 
     setBgUploadStatus('uploading');
     try {
-      const { error } = await supabase.from('reportes').insert([finalPayload]);
-      if (error) throw error;
-      
-      setBgUploadStatus('success');
-      if (payload.tipo === 'Camino Libre') {
-        setShowClearSuccess(true);
-        setTimeout(() => setShowClearSuccess(false), 4000);
+      const { error, status } = await supabase.from('reportes').insert([finalPayload]);
+      if (!error && (status === 201 || status === 200)) {
+        setBgUploadStatus('success');
+        if (payload.tipo === 'Libre') {
+          setShowClearSuccess(true);
+          setTimeout(() => setShowClearSuccess(false), 4000);
+        }
+        fetchReports(true);
+      } else {
+        throw new Error("Insert fail");
       }
-      
-      fetchReports(true);
       setTimeout(() => setBgUploadStatus('idle'), 3000);
     } catch (err) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
@@ -249,19 +223,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchReports();
-    // Reintento Agresivo: Cada 15s para asegurar que nada se quede trabado
     const syncInterval = setInterval(processPendingReports, 15000);
-    const refreshInterval = setInterval(() => { 
-      if (document.visibilityState === 'visible') fetchReports(true); 
-    }, 60000);
-
+    const refreshInterval = setInterval(() => { if (document.visibilityState === 'visible') fetchReports(true); }, 60000);
     window.addEventListener('online', processPendingReports);
-    return () => {
-      clearInterval(syncInterval);
-      clearInterval(refreshInterval);
-      window.removeEventListener('online', processPendingReports);
-    };
+    return () => { clearInterval(syncInterval); clearInterval(refreshInterval); window.removeEventListener('online', processPendingReports); };
   }, [fetchReports, processPendingReports]);
 
   useEffect(() => {
@@ -272,8 +237,7 @@ const App: React.FC = () => {
           setUserLocation(coords);
           if (followUser) setMapCenter(coords);
         },
-        null,
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        null, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
@@ -283,7 +247,6 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
-      {/* Icono de Reloj Discreto (Pendientes Offline) */}
       {pendingCount > 0 && bgUploadStatus !== 'syncing' && (
         <div className="fixed top-24 right-4 z-[120] flex items-center gap-2 bg-orange-500 text-white px-3 py-1.5 rounded-full shadow-lg border border-white/20 animate-pulse">
           <Clock size={16} />
@@ -291,30 +254,24 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Toast de agradecimiento Camino Libre */}
       {showClearSuccess && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in fade-in duration-300 w-[90%] max-w-sm">
           <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] border-2 border-white/20 flex items-center gap-4">
-            <div className="bg-white/20 p-2 rounded-xl">
-              <CheckCircle size={24} strokeWidth={3} />
-            </div>
+            <div className="bg-white/20 p-2 rounded-xl"><CheckCircle size={24} strokeWidth={3} /></div>
             <div>
               <p className="text-sm font-black uppercase italic leading-tight">¡Gracias!</p>
-              <p className="text-[10px] font-bold opacity-90 uppercase">Reportaste camino despejado</p>
+              <p className="text-[10px] font-bold opacity-90 uppercase">Ruta marcada como Libre</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast de Nuevo Reporte Real-time */}
       {newReportToast && !showClearSuccess && (
-        <div 
-          onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }}
-          className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top fade-in duration-500 w-[90%] max-w-sm cursor-pointer"
-        >
-          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
+        <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }}
+             className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top fade-in duration-500 w-[90%] max-w-sm cursor-pointer">
+          <div className={`${newReportToast.tipo === 'Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
             <div className="bg-slate-900 p-2 rounded-xl text-white">
-              {newReportToast.tipo === 'Camino Libre' ? <CheckCircle size={24} /> : <AlertTriangle size={24} strokeWidth={3} />}
+              {newReportToast.tipo === 'Libre' ? <CheckCircle size={24} /> : <AlertTriangle size={24} strokeWidth={3} />}
             </div>
             <div className="flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Nuevo Reporte</p>
@@ -325,66 +282,33 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Banner Instalación */}
-      {showInstallBanner && !isStandalone && (
-        <div className="fixed bottom-28 left-4 right-4 z-[100] animate-in slide-in-from-bottom duration-500">
-          <div className="bg-slate-800 border-2 border-[#FFCC00]/50 p-4 rounded-3xl shadow-2xl flex items-center justify-between backdrop-blur-xl">
-            <div className="flex items-center gap-3">
-              <div className="bg-[#FFCC00] p-2 rounded-xl text-slate-900 shadow-lg shadow-[#FFCC00]/20"><Download size={20} /></div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-tight text-white">Instalar Hay Paso</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">Acceso directo y offline</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleInstallClick} className="bg-[#FFCC00] text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-[#FFCC00]/20">Instalar</button>
-              <button onClick={() => setShowInstallBanner(false)} className="p-2 text-slate-500"><CloseIcon size={18} /></button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Sincronización Background Feedback */}
       {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing' || bgUploadStatus === 'success') && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
             bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
-            bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' :
-            'bg-emerald-500/90 border-emerald-400'
+            bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' : 'bg-emerald-500/90 border-emerald-400'
           }`}>
             {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing') && (
-              <><Loader2 className="animate-spin text-white" size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white">SINCRONIZANDO REPORTES...</span></>
+              <><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white italic">Sincronizando...</span></>
             )}
-            {bgUploadStatus === 'success' && (
-              <><CheckCircle2 className="text-white" size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white">ACTUALIZADO CON ÉXITO</span></>
-            )}
+            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">Actualizado</span></>)}
           </div>
         </div>
       )}
 
       <div className="absolute inset-0 z-0">
-        <MapView 
-          reports={reports} 
-          center={mapCenter} 
-          zoom={mapZoom} 
-          userLocation={userLocation} 
-          onlineUsers={onlineUsers}
-          onMapInteraction={() => setFollowUser(false)} 
-        />
+        <MapView reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={{}} onMapInteraction={() => setFollowUser(false)} />
       </div>
-
       <div className="absolute top-0 left-0 right-0 z-50">
         <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
       </div>
-
       <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ease-in-out shadow-2xl ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <ChatPanel onClose={() => setChatOpen(false)} />
       </div>
 
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
-        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
+        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} 
+                className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
         <button onClick={() => setShowForm(true)} className="bg-[#FFCC00] text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(255,204,0,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center">
