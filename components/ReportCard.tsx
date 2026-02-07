@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Report, ReportType } from '../types';
 import { 
   Clock, X, Maximize2, Loader2, 
@@ -16,9 +15,18 @@ interface ReportCardProps {
 
 const formatTimeAgo = (dateString: string) => {
   const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
-  if (diff < 1) return 'Ahora';
-  if (diff < 60) return `${diff}m`;
-  return `${Math.floor(diff/60)}h`;
+  if (diff < 1) return 'Justo ahora';
+  if (diff < 60) return `Hace ${diff} min`;
+  const hours = Math.floor(diff / 60);
+  if (hours === 1) return 'Hace 1 hora';
+  return `Hace ${hours} horas`;
+};
+
+const getTimeStyle = (dateString: string) => {
+  const diffMinutes = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
+  if (diffMinutes < 15) return 'text-yellow-400 font-black'; // Resaltado
+  if (diffMinutes > 720) return 'text-slate-600 font-medium'; // Tenue (>12h)
+  return 'text-slate-400 font-bold'; // Normal
 };
 
 const getCategoryConfig = (type: ReportType) => {
@@ -50,9 +58,18 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [voted, setVoted] = useState(false);
   const [isVoting, setIsVoting] = useState(false);
+  const [currentTime, setCurrentTime] = useState(formatTimeAgo(report.created_at));
 
   const [localSigue, setLocalSigue] = useState(report.votos_sigue || 0);
   const [localDespejado, setLocalDespejado] = useState(report.votos_despejado || 0);
+
+  // Actualizar el tiempo relativo cada minuto
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(formatTimeAgo(report.created_at));
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [report.created_at]);
 
   const handleVote = async (e: React.MouseEvent, voto: 'sigue' | 'despejado') => {
     e.stopPropagation();
@@ -124,9 +141,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
                   {report.tipo}
                 </h3>
               </div>
-              <div className="flex items-center gap-1 text-slate-500 text-[10px] font-bold shrink-0">
+              <div className={`flex items-center gap-1 text-[10px] uppercase tracking-tight shrink-0 transition-colors ${getTimeStyle(report.created_at)}`}>
                 <Clock size={10} />
-                {formatTimeAgo(report.created_at)}
+                {currentTime}
               </div>
             </div>
 

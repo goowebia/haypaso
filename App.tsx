@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserId } from './lib/supabase';
 import { Report } from './types';
@@ -27,10 +28,6 @@ const App: React.FC = () => {
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
   const [showClearSuccess, setShowClearSuccess] = useState(false);
-
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
 
   const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'syncing' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
@@ -62,7 +59,6 @@ const App: React.FC = () => {
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
-      // Filtro estricto de 24 horas para el historial
       const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       const { data: reportsData, error: reportsError } = await supabase
@@ -98,7 +94,6 @@ const App: React.FC = () => {
     
     let pending = JSON.parse(stored);
     const now = new Date();
-    // Limpieza de storage local: Eliminar lo que tenga +24h
     pending = pending.filter((p: any) => (now.getTime() - new Date(p.created_at).getTime()) < (24 * 60 * 60 * 1000));
     localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
     setPendingCount(pending.length);
@@ -107,14 +102,12 @@ const App: React.FC = () => {
     if (!navigator.onLine || !(await checkRealConnection())) return;
 
     setBgUploadStatus('syncing');
-    // Prioridad: Reportes 'Libre' se envían primero
     pending.sort((a: any, b: any) => (a.tipo === 'Libre' ? -1 : 1));
 
     const currentQueue = [...pending];
     for (const payload of pending) {
       try {
         const { error, status } = await supabase.from('reportes').insert([payload]);
-        // Solo borrar si Supabase confirma éxito (status 201)
         if (!error && (status === 201 || status === 200)) {
           const idx = currentQueue.findIndex(p => p.created_at === payload.created_at && p.tipo === payload.tipo);
           if (idx > -1) {
@@ -137,11 +130,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initApp = async () => {
-      // Limpieza automática vía RPC al iniciar
+      // LLAMADA RPC PARA LIMPIEZA AUTOMÁTICA
       try {
         await supabase.rpc('limpiar_reportes_viejos');
       } catch (e) {
-        console.warn("RPC limpiar_reportes_viejos no disponible");
+        console.warn("RPC limpiar_reportes_viejos no disponible aún.");
       }
       fetchReports();
     };
@@ -163,15 +156,18 @@ const App: React.FC = () => {
         setTimeout(() => setNewlyAddedId(null), 10000);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reportes' }, async (payload) => {
-        // Limpieza de Bucket antes de que desaparezca el registro
-        const oldReport = payload.old as any;
-        if (oldReport?.fotos && oldReport.fotos.length > 0) {
-          const paths = oldReport.fotos.map((url: string) => {
+        // BORRADO FÍSICO DE IMÁGENES
+        // Requiere REPLICA IDENTITY FULL en la tabla para que payload.old tenga las fotos
+        const oldData = payload.old as any;
+        if (oldData?.fotos && oldData.fotos.length > 0) {
+          const pathsToDelete = oldData.fotos.map((url: string) => {
             const parts = url.split('/');
             return parts[parts.length - 1];
           }).filter(Boolean);
-          if (paths.length > 0) {
-            await supabase.storage.from('imagenes').remove(paths);
+          
+          if (pathsToDelete.length > 0) {
+            console.log("Limpiando Storage físicamente:", pathsToDelete);
+            await supabase.storage.from('imagenes').remove(pathsToDelete);
           }
         }
         fetchReports(true);
@@ -211,7 +207,7 @@ const App: React.FC = () => {
         }
         fetchReports(true);
       } else {
-        throw new Error("Insert fail");
+        throw new Error("Insert error");
       }
       setTimeout(() => setBgUploadStatus('idle'), 3000);
     } catch (err) {
@@ -259,8 +255,8 @@ const App: React.FC = () => {
           <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] border-2 border-white/20 flex items-center gap-4">
             <div className="bg-white/20 p-2 rounded-xl"><CheckCircle size={24} strokeWidth={3} /></div>
             <div>
-              <p className="text-sm font-black uppercase italic leading-tight">¡Gracias!</p>
-              <p className="text-[10px] font-bold opacity-90 uppercase">Ruta marcada como Libre</p>
+              <p className="text-sm font-black uppercase italic leading-tight">¡Confirmado!</p>
+              <p className="text-[10px] font-bold opacity-90 uppercase">Vía marcada como libre</p>
             </div>
           </div>
         </div>
@@ -276,7 +272,7 @@ const App: React.FC = () => {
             <div className="flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Nuevo Reporte</p>
               <p className="text-sm font-black uppercase italic leading-tight">{newReportToast.tipo}</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase truncate max-w-[180px]">{newReportToast.descripcion || 'Sin detalles'}</p>
+              <p className="text-[10px] font-bold opacity-80 uppercase truncate max-w-[180px]">{newReportToast.descripcion || 'Vía revisada'}</p>
             </div>
           </div>
         </div>
@@ -289,9 +285,9 @@ const App: React.FC = () => {
             bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' : 'bg-emerald-500/90 border-emerald-400'
           }`}>
             {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing') && (
-              <><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white italic">Sincronizando...</span></>
+              <><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white italic">Conectando...</span></>
             )}
-            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">Actualizado</span></>)}
+            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">¡Sincronizado!</span></>)}
           </div>
         </div>
       )}

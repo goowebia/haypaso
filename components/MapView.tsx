@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
+// Added missing Clock import from lucide-react
+import { Clock } from 'lucide-react';
 import { Report } from '../types';
 
 interface MapViewProps {
@@ -12,6 +14,15 @@ interface MapViewProps {
   onlineUsers: Record<string, { lat: number, lng: number }>;
   onMapInteraction?: () => void;
 }
+
+const formatTimeAgo = (dateString: string) => {
+  const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
+  if (diff < 1) return 'Justo ahora';
+  if (diff < 60) return `Hace ${diff} min`;
+  const hours = Math.floor(diff / 60);
+  if (hours === 1) return 'Hace 1 hora';
+  return `Hace ${hours} horas`;
+};
 
 const MapController = ({ center, zoom, onInteraction }: { center: [number, number], zoom: number, onInteraction?: () => void }) => {
   const map = useMap();
@@ -107,22 +118,6 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
   });
 };
 
-const getLiveUserIcon = () => {
-  const carSvg = `
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="#facc15" fill-opacity="0.8" stroke="white" stroke-width="1.5"/>
-      <path d="M17 11.5V14.5M7 11.5V14.5M10 17H14" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
-      <path d="M6 11L7.5 7.5H16.5L18 11H6Z" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
-    </svg>
-  `;
-  return L.divIcon({
-    className: 'live-user-marker',
-    html: carSvg,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
-};
-
 const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onlineUsers, onMapInteraction }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
@@ -150,11 +145,17 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
             zIndexOffset={report.votos_sigue >= 5 ? 500 : 100}
           >
             <Popup closeButton={false}>
-              <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
-                <strong className={`block uppercase text-[10px] font-black ${report.tipo === 'Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>{report.tipo}</strong>
-                <div className="h-px bg-slate-700 my-1" />
-                <div className="text-[8px] text-slate-400 font-black uppercase">
-                  {isNew ? '✨ RECIÉN REPORTADO' : report.votos_sigue >= 5 ? '⚠️ PELIGRO CONFIRMADO' : 'REPORTE VIAL'}
+              <div className="p-2 text-center bg-slate-900 text-white rounded-xl border border-white/10 shadow-2xl min-w-[140px] animate-in fade-in zoom-in duration-200">
+                <div className="flex items-center justify-center gap-1.5 text-[9px] font-black text-slate-400 mb-1.5 uppercase tracking-tighter">
+                  <Clock size={10} className="text-yellow-400" />
+                  {formatTimeAgo(report.created_at)}
+                </div>
+                <div className="h-px bg-white/5 w-full mb-1.5" />
+                <strong className={`block uppercase text-[11px] font-black italic tracking-tighter ${report.tipo === 'Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                  {report.tipo}
+                </strong>
+                <div className="text-[8px] text-slate-500 font-bold uppercase mt-1 tracking-widest">
+                  {isNew ? '✨ RECIÉN REPORTADO' : report.votos_sigue >= 5 ? '⚠️ CONFIRMADO POR VARIOS' : 'VÍA REVISADA'}
                 </div>
               </div>
             </Popup>

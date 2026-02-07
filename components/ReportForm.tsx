@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2, Cloud } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2 } from 'lucide-react';
 import { ReportType } from '../types';
 import imageCompression from 'browser-image-compression';
 
@@ -33,7 +33,14 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     if (type === 'image') {
       setIsCompressing(true);
       try {
-        const compressedFile = await imageCompression(file, { maxSizeMB: 0.3, maxWidthOrHeight: 1200, useWebWorker: true });
+        // OPTIMIZACIÓN EXTREMA: 800px máx y 0.1MB (~100KB)
+        const options = {
+          maxSizeMB: 0.1,
+          maxWidthOrHeight: 800,
+          useWebWorker: true,
+          fileType: 'image/jpeg'
+        };
+        const compressedFile = await imageCompression(file, options);
         const reader = new FileReader();
         reader.onloadend = () => {
           setMedia([{ type, data: reader.result as string, file: compressedFile }]);
@@ -41,6 +48,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         };
         reader.readAsDataURL(compressedFile);
       } catch (error) {
+        console.error("Error comprimiendo:", error);
         setIsCompressing(false);
       }
     } else {
@@ -51,11 +59,12 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   };
 
   const handleSend = () => {
-    if (!selectedType && comment.trim().length === 0 && media.length === 0) return;
-
+    // Si no hay tipo pero se envía, asumimos 'Libre' (Botón Verde)
+    const finalType = selectedType || 'Libre';
+    
     const payload = {
-      tipo: selectedType || 'Libre',
-      descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Reporte enviado"),
+      tipo: finalType,
+      descripcion: comment.trim() || (finalType === 'Libre' ? "Camino despejado" : `Reporte de ${finalType}`),
       fotos: media.filter(m => m.type === 'image').map(m => m.data),
       video_url: media.find(m => m.type === 'video')?.data || null,
       latitud: coords?.lat,
@@ -85,8 +94,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Panel de reporte vial</p>
+          <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2 text-shadow-sm">REPORTAR</h2>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Compresión activa: 100KB máx</p>
         </div>
         <button onClick={() => onClose(false)} className="p-3 bg-slate-800/80 text-slate-400 rounded-full active:scale-90 border border-white/5">
           <X size={24} />
@@ -130,9 +139,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           <div className="relative w-28 h-28 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
             {media.length > 0 ? (
               <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
-            ) : <span className="text-[10px] font-black text-slate-700 uppercase text-center px-2">Vista Previa</span>}
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase text-center px-2 opacity-40">Sin Media</span>}
           </div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentario adicional..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-28" />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="¿Algún detalle extra?" className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-28" />
         </div>
       </div>
 
@@ -149,7 +158,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           }`}
         >
           <Send size={24} strokeWidth={4} />
-          ENVIAR AHORA
+          {isClearRoad ? 'MARCAR LIBRE' : 'ENVIAR REPORTE'}
         </button>
       </div>
     </div>
