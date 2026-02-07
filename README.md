@@ -1,7 +1,7 @@
 
 # Hay Paso 🚗💨 - Configuración de Base de Datos (Actualizado 24h)
 
-Copia y ejecuta este script en el **SQL Editor** de tu proyecto en Supabase para habilitar todas las funciones, incluyendo la caducidad de 24 horas.
+Copia y ejecuta este script en el **SQL Editor** de tu proyecto en Supabase para habilitar todas las funciones, incluyendo la caducidad de 24 horas y la categoría 'Camino Libre'.
 
 ```sql
 -- 1. Borrar tablas actuales
@@ -14,6 +14,7 @@ create table reportes (
   id uuid default gen_random_uuid() primary key,
   created_at timestamp with time zone default now(),
   tipo text check (tipo in (
+    'Camino Libre',
     'Tráfico Lento', 'Tráfico Pesado', 'Alto Total', 
     'Accidente', 'Obras', 
     'Policía Visible', 'Policía Escondido', 'Policía Contrario',

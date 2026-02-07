@@ -6,7 +6,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   
   // Real-time notifications
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
@@ -39,7 +40,6 @@ const App: React.FC = () => {
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
   
   // Estados de carga y sincronización
-  // 'syncing' es el nuevo estado para cuando se procesan lotes offline con internet verificado
   const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'syncing' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -52,13 +52,12 @@ const App: React.FC = () => {
     }
   }, [soundEnabled]);
 
-  // Función para validar conexión real (Ping)
   const checkRealConnection = async (): Promise<boolean> => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
-      // Intentamos un fetch ligero a un recurso conocido
-      const response = await fetch('https://www.google.com/favicon.ico', { 
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      // Usamos una URL que responda rápido para verificar conectividad real
+      await fetch('https://www.google.com/favicon.ico', { 
         mode: 'no-cors', 
         signal: controller.signal,
         cache: 'no-store'
@@ -73,6 +72,7 @@ const App: React.FC = () => {
   const fetchReports = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
+      // Filtro estricto de 24 horas: Borrado lógico en el cliente
       const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       const { data: reportsData, error: reportsError } = await supabase
@@ -102,23 +102,34 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Lógica de Sincronización de Pendientes (Offline -> Online)
+  // Lógica de Sincronización Forzada (Offline -> Online)
   const processPendingReports = useCallback(async () => {
     const stored = localStorage.getItem(PENDING_REPORTS_KEY);
-    if (!stored) return;
+    if (!stored) {
+      setPendingCount(0);
+      return;
+    }
     
     let pending = JSON.parse(stored);
+    // Eliminar reportes con más de 24 horas que nunca se subieron
+    const now = new Date();
+    pending = pending.filter((p: any) => {
+      const created = new Date(p.created_at);
+      return (now.getTime() - created.getTime()) < (24 * 60 * 60 * 1000);
+    });
+    localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
+    setPendingCount(pending.length);
+
     if (pending.length === 0) return;
 
-    // 1. Verificación básica y verficación real de internet
+    // Verificación de internet real
     if (!navigator.onLine) return;
-    const hasQualityInternet = await checkRealConnection();
-    if (!hasQualityInternet) return;
+    const isActuallyOnline = await checkRealConnection();
+    if (!isActuallyOnline) return;
 
-    // 2. Feedback visual de sincronización (Verde)
     setBgUploadStatus('syncing');
 
-    // 3. Prioridad: 'Camino Libre' primero para limpiar el mapa rápido
+    // Prioridad: 'Camino Libre' primero
     pending.sort((a: any, b: any) => (a.tipo === 'Camino Libre' ? -1 : 1));
 
     let successCount = 0;
@@ -127,20 +138,20 @@ const App: React.FC = () => {
     for (const payload of pending) {
       try {
         const { error } = await supabase.from('reportes').insert([payload]);
+        // Solo borramos si el status es exitoso (error es null)
         if (!error) {
           successCount++;
-          // 4. Limpieza Automática: Eliminar del array local tras éxito
-          const idx = currentQueue.indexOf(payload);
+          const idx = currentQueue.findIndex(p => p.created_at === payload.created_at && p.tipo === payload.tipo);
           if (idx > -1) {
             currentQueue.splice(idx, 1);
             localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(currentQueue));
+            setPendingCount(currentQueue.length);
           }
         } else {
-          // Si hay error de red, paramos el bucle para reintentar en 30s
+          // Si hay error (ej. timeout), paramos el lote para el siguiente ciclo
           break;
         }
       } catch (err) {
-        console.error("Error upload item:", err);
         break;
       }
     }
@@ -148,7 +159,7 @@ const App: React.FC = () => {
     if (successCount > 0) {
       setBgUploadStatus('success');
       fetchReports(true);
-      setTimeout(() => setBgUploadStatus('idle'), 4000);
+      setTimeout(() => setBgUploadStatus('idle'), 3000);
     } else {
       setBgUploadStatus('idle');
     }
@@ -159,6 +170,10 @@ const App: React.FC = () => {
       .channel('realtime-reports')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, (payload) => {
         const newReport = payload.new as Report;
+        // Ignorar reportes viejos que lleguen por delay de red
+        const limit = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        if (new Date(newReport.created_at) < limit) return;
+
         setReports(prev => {
           if (prev.find(r => r.id === newReport.id)) return prev;
           return [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev];
@@ -201,16 +216,14 @@ const App: React.FC = () => {
       created_at: new Date().toISOString()
     };
 
-    const isClearRoad = payload.tipo === 'Camino Libre';
-
-    // Verificación real antes de intentar envío directo
     const isActuallyOnline = navigator.onLine && (await checkRealConnection());
 
     if (!isActuallyOnline) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
+      setPendingCount(stored.length + 1);
       setBgUploadStatus('offline');
-      setTimeout(() => setBgUploadStatus('idle'), 5000);
+      setTimeout(() => setBgUploadStatus('idle'), 2000);
       return;
     }
 
@@ -220,7 +233,7 @@ const App: React.FC = () => {
       if (error) throw error;
       
       setBgUploadStatus('success');
-      if (isClearRoad) {
+      if (payload.tipo === 'Camino Libre') {
         setShowClearSuccess(true);
         setTimeout(() => setShowClearSuccess(false), 4000);
       }
@@ -230,23 +243,20 @@ const App: React.FC = () => {
     } catch (err) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
+      setPendingCount(stored.length + 1);
       setBgUploadStatus('offline');
     }
   };
 
   useEffect(() => {
     fetchReports();
-    // Reintento Agresivo: Cada 30s intentamos sincronizar si hay pendientes
-    const syncInterval = setInterval(() => {
-      processPendingReports();
-    }, 30000);
-
+    // Reintento Agresivo: Cada 15s para asegurar que nada se quede trabado
+    const syncInterval = setInterval(processPendingReports, 15000);
     const refreshInterval = setInterval(() => { 
       if (document.visibilityState === 'visible') fetchReports(true); 
     }, 60000);
 
     window.addEventListener('online', processPendingReports);
-
     return () => {
       clearInterval(syncInterval);
       clearInterval(refreshInterval);
@@ -272,6 +282,14 @@ const App: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
+
+      {/* Icono de Reloj Discreto (Pendientes Offline) */}
+      {pendingCount > 0 && bgUploadStatus !== 'syncing' && (
+        <div className="fixed top-24 right-4 z-[120] flex items-center gap-2 bg-orange-500 text-white px-3 py-1.5 rounded-full shadow-lg border border-white/20 animate-pulse">
+          <Clock size={16} />
+          <span className="text-[10px] font-black">{pendingCount}</span>
+        </div>
+      )}
 
       {/* Toast de agradecimiento Camino Libre */}
       {showClearSuccess && (
@@ -327,18 +345,21 @@ const App: React.FC = () => {
       )}
 
       {/* Sincronización Background Feedback */}
-      {bgUploadStatus !== 'idle' && (
+      {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing' || bgUploadStatus === 'success') && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
             bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
             bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' :
-            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' : 
             'bg-emerald-500/90 border-emerald-400'
           }`}>
-            {bgUploadStatus === 'uploading' && (<><Loader2 className="animate-spin text-[#FFCC00]" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</span></>)}
-            {bgUploadStatus === 'syncing' && (<><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">Sincronizando Reportes...</span></>)}
-            {bgUploadStatus === 'offline' && (<><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Guardado Offline</span></>)}
-            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Sincronizado con Éxito</span></>)}
+            {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing') && (
+              <><Loader2 className="animate-spin text-white" size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white">SINCRONIZANDO REPORTES...</span></>
+            )}
+            {bgUploadStatus === 'success' && (
+              <><CheckCircle2 className="text-white" size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-white">ACTUALIZADO CON ÉXITO</span></>
+            )}
           </div>
         </div>
       )}
