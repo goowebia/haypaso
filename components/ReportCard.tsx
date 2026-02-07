@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Report } from '../types';
-import { Clock, AlertTriangle, X, Maximize2, Loader2, Check, MapPin } from 'lucide-react';
+import { Clock, AlertTriangle, X, Maximize2, Loader2 } from 'lucide-react';
 import { supabase, getUserId } from '../lib/supabase';
 
 interface ReportCardProps {
@@ -60,27 +60,28 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
           isAlert ? 'border-yellow-400/50 bg-yellow-400/5' : 'border-slate-700/50'
         }`}
       >
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           {/* Contenido Izquierdo (Texto) */}
           <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-center mb-1">
+            <div className="flex justify-between items-center mb-1.5">
               <div className="flex items-center gap-1.5 min-w-0">
                 <AlertTriangle 
                   size={12} 
                   className={isAlert ? 'text-yellow-400' : 'text-slate-400'} 
                   fill={isAlert ? "currentColor" : "none"} 
                 />
-                <h3 className={`font-black text-[10px] uppercase tracking-tighter truncate ${isAlert ? 'text-yellow-400' : 'text-slate-200'}`}>
+                <h3 className={`font-black text-[11px] uppercase tracking-wider truncate ${isAlert ? 'text-yellow-400' : 'text-slate-400'}`}>
                   {report.tipo}
                 </h3>
               </div>
-              <div className="flex items-center gap-1 text-slate-500 text-[8px] font-bold shrink-0">
-                <Clock size={8} />
+              <div className="flex items-center gap-1 text-slate-500 text-[10px] font-bold shrink-0">
+                <Clock size={10} />
                 {formatTimeAgo(report.created_at)}
               </div>
             </div>
 
-            <p className="text-slate-400 text-[10px] leading-tight line-clamp-2 mb-2 italic">
+            {/* Descripción optimizada: 15px, Blanco Puro, Peso 500 */}
+            <p className="text-[#f8f9fa] text-[15px] font-medium leading-snug line-clamp-2 mb-3">
               {report.descripcion || 'Sin detalles adicionales.'}
             </p>
 
@@ -89,25 +90,25 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
               <button 
                 onClick={(e) => handleVote(e, 'sigue')}
                 disabled={voted || isVoting}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-[9px] font-black py-1.5 rounded-lg uppercase transition-all border ${
+                className={`flex-1 flex items-center justify-center gap-1.5 text-[10px] font-black py-1.5 rounded-lg uppercase transition-all border ${
                   voted 
                     ? 'bg-yellow-400/10 text-yellow-500 border-yellow-400/20' 
                     : 'bg-slate-700/30 text-slate-400 border-transparent active:scale-95'
                 }`}
               >
-                {isVoting ? <Loader2 size={10} className="animate-spin" /> : 'Sigue'} 
+                {isVoting ? <Loader2 size={12} className="animate-spin" /> : 'Sigue'} 
                 <span className="bg-black/20 px-1.5 rounded text-inherit">{localSigue}</span>
               </button>
               <button 
                 onClick={(e) => handleVote(e, 'despejado')}
                 disabled={voted || isVoting}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-[9px] font-black py-1.5 rounded-lg uppercase transition-all border ${
+                className={`flex-1 flex items-center justify-center gap-1.5 text-[10px] font-black py-1.5 rounded-lg uppercase transition-all border ${
                   voted 
                     ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20' 
                     : 'bg-slate-700/30 text-slate-400 border-transparent active:scale-95'
                 }`}
               >
-                {isVoting ? <Loader2 size={10} className="animate-spin" /> : 'Libre'}
+                {isVoting ? <Loader2 size={12} className="animate-spin" /> : 'Libre'}
                 <span className="bg-black/20 px-1.5 rounded text-inherit">{localDespejado}</span>
               </button>
             </div>
@@ -117,14 +118,14 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
           {hasImage && (
             <div 
               onClick={(e) => { e.stopPropagation(); setSelectedImage(report.fotos![0]); }}
-              className="relative w-20 h-20 rounded-xl overflow-hidden bg-black border border-slate-700/50 shrink-0"
+              className="relative w-20 h-20 rounded-xl overflow-hidden bg-black border border-slate-700/50 shrink-0 self-center"
             >
               <img src={report.fotos![0]} alt="Miniatura" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                <Maximize2 size={10} className="text-white opacity-60" />
+                <Maximize2 size={12} className="text-white opacity-60" />
               </div>
               {report.fotos!.length > 1 && (
-                <div className="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[8px] font-black text-white">
+                <div className="absolute bottom-1 right-1 bg-black/60 px-1.5 rounded text-[9px] font-black text-white">
                   +{report.fotos!.length - 1}
                 </div>
               )}
