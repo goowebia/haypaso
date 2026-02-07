@@ -1,7 +1,11 @@
 
 import React, { useState } from 'react';
-import { Report } from '../types';
-import { Clock, AlertTriangle, X, Maximize2, Loader2 } from 'lucide-react';
+import { Report, ReportType } from '../types';
+import { 
+  Clock, X, Maximize2, Loader2, 
+  Gauge, AlertOctagon, Shield, 
+  HardHat, Car, AlertTriangle, Info 
+} from 'lucide-react';
 import { supabase, getUserId } from '../lib/supabase';
 
 interface ReportCardProps {
@@ -14,6 +18,30 @@ const formatTimeAgo = (dateString: string) => {
   if (diff < 1) return 'Ahora';
   if (diff < 60) return `${diff}m`;
   return `${Math.floor(diff/60)}h`;
+};
+
+const getCategoryConfig = (type: ReportType) => {
+  switch (type) {
+    case 'Accidente':
+    case 'Alto Total':
+    case 'Clima':
+      return { icon: AlertOctagon, color: 'text-red-500', fill: 'none' };
+    case 'Tráfico Pesado':
+      return { icon: Gauge, color: 'text-orange-500', fill: 'none' };
+    case 'Tráfico Lento':
+      return { icon: Gauge, color: 'text-yellow-400', fill: 'none' };
+    case 'Policía Visible':
+    case 'Policía Escondido':
+    case 'Policía Contrario':
+      return { icon: Shield, color: 'text-blue-500', fill: 'none' };
+    case 'Obras':
+      return { icon: HardHat, color: 'text-slate-400', fill: 'none' };
+    case 'Vehículo en Vía':
+    case 'Vehículo en Lateral':
+      return { icon: Car, color: 'text-slate-400', fill: 'none' };
+    default:
+      return { icon: Info, color: 'text-slate-500', fill: 'none' };
+  }
 };
 
 const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
@@ -51,6 +79,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
 
   const isAlert = localSigue >= 5;
   const hasImage = report.fotos && report.fotos.length > 0;
+  const config = getCategoryConfig(report.tipo);
+  const CategoryIcon = isAlert ? AlertTriangle : config.icon;
 
   return (
     <>
@@ -64,10 +94,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
           {/* Contenido Izquierdo (Texto) */}
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <AlertTriangle 
-                  size={12} 
-                  className={isAlert ? 'text-yellow-400' : 'text-slate-400'} 
+              <div className="flex items-center gap-2 min-w-0">
+                <CategoryIcon 
+                  size={16} 
+                  className={isAlert ? 'text-yellow-400' : config.color} 
                   fill={isAlert ? "currentColor" : "none"} 
                 />
                 <h3 className={`font-black text-[11px] uppercase tracking-wider truncate ${isAlert ? 'text-yellow-400' : 'text-slate-400'}`}>
@@ -80,7 +110,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
               </div>
             </div>
 
-            {/* Descripción optimizada: 15px, Blanco Puro, Peso 500 */}
+            {/* Descripción legible: 15px-16px, Blanco Puro, Peso 500 */}
             <p className="text-[#f8f9fa] text-[15px] font-medium leading-snug line-clamp-2 mb-3">
               {report.descripcion || 'Sin detalles adicionales.'}
             </p>
