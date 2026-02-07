@@ -1,5 +1,5 @@
 {
-  "id": "hay-paso-v3",
+  "id": "hay-paso-v4-final",
   "short_name": "PASO",
   "name": "Hay Paso - Reporte Vial",
   "description": "Reporte de tráfico en tiempo real para la ruta Manzanillo-Colima-Guadalajara.",
@@ -17,8 +17,8 @@
       "purpose": "any maskable"
     },
     {
-      "src": "https://placehold.co/512x512/FFCC00/000000.png?text=%E2%96%B2",
-      "type": "image/png",
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiNGRkNDMDAiLz4KICA8cGF0aCBkPSJNMjU2IDEwMCBMNDEyIDQwMCBMMTAwIDQwMCBaIiBmaWxsPSIjMDAwMDAwIi8+Cjwvc3ZnPg==",
+      "type": "image/svg+xml",
       "sizes": "512x512",
       "purpose": "any"
     }
