@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2 } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2 } from 'lucide-react';
 import { ReportType } from '../types';
 import imageCompression from 'browser-image-compression';
 
@@ -19,7 +19,6 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Captura prioritaria de ubicación para reporte offline
     navigator.geolocation.getCurrentPosition(
       (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       null,
@@ -55,7 +54,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     if (!selectedType && comment.trim().length === 0 && media.length === 0) return;
 
     const payload = {
-      tipo: selectedType || 'Tráfico Lento',
+      tipo: selectedType || 'Camino Libre',
       descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Evidencia enviada"),
       fotos: media.filter(m => m.type === 'image').map(m => m.data),
       video_url: media.find(m => m.type === 'video')?.data || null,
@@ -68,6 +67,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   };
 
   const categories: { label: ReportType; icon: any; color: string }[] = [
+    { label: 'Camino Libre', icon: CheckCircle2, color: 'bg-emerald-500' },
     { label: 'Tráfico Lento', icon: Gauge, color: 'bg-yellow-400' },
     { label: 'Tráfico Pesado', icon: Gauge, color: 'bg-orange-500' },
     { label: 'Alto Total', icon: AlertOctagon, color: 'bg-red-600' },
@@ -76,10 +76,10 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     { label: 'Accidente', icon: AlertOctagon, color: 'bg-red-500' },
     { label: 'Obras', icon: HardHat, color: 'bg-amber-600' },
     { label: 'Vehículo en Vía', icon: Car, color: 'bg-slate-500' },
-    { label: 'Clima', icon: AlertOctagon, color: 'bg-cyan-500' },
   ];
 
   const canSubmit = (selectedType !== null || comment.trim().length > 0 || media.length > 0) && !isCompressing;
+  const isClearRoad = selectedType === 'Camino Libre';
 
   return (
     <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
@@ -88,23 +88,24 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Subida mixta activa (Cámara/Galería)</p>
         </div>
-        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90">
+        <button onClick={() => onClose(false)} className="p-3 bg-slate-800/80 text-slate-400 rounded-full active:scale-90 border border-white/5">
           <X size={24} />
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5 mb-6">
+      {/* Grid de 3x3 para evitar scroll */}
+      <div className="grid grid-cols-3 gap-2.5 mb-6 overflow-hidden">
         {categories.map((cat) => (
           <button
             key={cat.label}
             onClick={() => setSelectedType(selectedType === cat.label ? null : cat.label)}
-            className={`flex flex-col items-center justify-center p-4 rounded-3xl border-b-[6px] transition-all active:scale-95 ${
+            className={`flex flex-col items-center justify-center p-3 rounded-3xl border-b-[6px] transition-all active:scale-95 min-h-[90px] ${
               selectedType === cat.label 
-                ? `${cat.color} border-black/20 scale-105 shadow-2xl` 
+                ? `${cat.color} border-black/20 scale-105 shadow-2xl text-white` 
                 : 'bg-slate-800/40 border-slate-900 text-slate-500 opacity-60'
             }`}
           >
-            <cat.icon size={22} className={selectedType === cat.label ? "text-white" : "text-slate-500"} />
+            <cat.icon size={24} className={selectedType === cat.label ? "text-white" : "text-slate-500"} />
             <span className={`text-[9px] font-black uppercase text-center mt-2 leading-tight ${selectedType === cat.label ? "text-white" : "text-slate-400"}`}>
               {cat.label}
             </span>
@@ -123,17 +124,16 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           </button>
         </div>
 
-        {/* Sin capture="environment" permite Galería + Cámara en móviles modernos */}
         <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
         <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
         <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50">
-          <div className="relative w-32 h-32 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
+          <div className="relative w-28 h-28 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
             {media.length > 0 ? (
               <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
-            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Previsualización</span>}
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase text-center px-2">Previsualización</span>}
           </div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario rápido..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32" />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario rápido..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-28" />
         </div>
       </div>
 
@@ -141,11 +141,15 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <button
           onClick={handleSend}
           disabled={!canSubmit}
-          className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all shadow-2xl ${
-            !canSubmit ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-yellow-400 text-slate-900 active:scale-95 shadow-yellow-400/20'
+          className={`w-full py-6 rounded-[40px] font-black uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-5 transition-all shadow-2xl ${
+            !canSubmit 
+              ? 'bg-slate-800 text-slate-600 cursor-not-allowed border-b-4 border-slate-900' 
+              : isClearRoad 
+                ? 'bg-emerald-500 text-white active:scale-95 shadow-emerald-500/20 border-b-4 border-emerald-700'
+                : 'bg-yellow-400 text-slate-900 active:scale-95 shadow-yellow-400/20 border-b-4 border-yellow-600'
           }`}
         >
-          <Send size={28} strokeWidth={4} />
+          <Send size={24} strokeWidth={4} />
           ENVIAR AHORA
         </button>
       </div>

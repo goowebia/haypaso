@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
@@ -54,14 +55,28 @@ const pulsingMarkerStyle = `
     top: -30px;
     left: -30px;
   }
+  .marker-pulse-ring-emerald {
+    border: 4px solid #10b981;
+    border-radius: 50%;
+    animation: marker-pulse 2s infinite ease-out;
+    pointer-events: none;
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    top: -30px;
+    left: -30px;
+  }
 `;
 
 const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = false) => {
   let color = '#facc15'; 
   if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
   if (type === 'Tráfico Pesado') color = '#f97316'; 
+  if (type === 'Camino Libre') color = '#10b981';
   if (['Obras', 'Vehículo en Vía', 'Vehículo en Lateral'].includes(type)) color = '#64748b'; 
   if (type.startsWith('Policía')) color = '#3b82f6'; 
+
+  const isClear = type === 'Camino Libre';
 
   const alertIcon = votosSigue >= 5 ? `
     <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
@@ -72,11 +87,11 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
   ` : `
     <svg width="46" height="46" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.5));">
       <path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 5.02944 7.02944 1 12 1C16.9706 1 21 5.02944 21 10Z" fill="${color}" stroke="white" stroke-width="2.5"/>
-      <circle cx="12" cy="10" r="3.5" fill="white"/>
+      ${isClear ? '<path d="M8 12L11 15L16 9" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>' : '<circle cx="12" cy="10" r="3.5" fill="white"/>'}
     </svg>
   `;
 
-  const pulseRing = isNew ? `<div class="marker-pulse-ring"></div>` : '';
+  const pulseRing = isNew ? `<div class="${isClear ? 'marker-pulse-ring-emerald' : 'marker-pulse-ring'}"></div>` : '';
 
   return L.divIcon({
     className: `custom-marker ${votosSigue >= 5 ? 'alert-high' : ''}`,
@@ -141,7 +156,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
           >
             <Popup closeButton={false}>
               <div className="p-2 text-center bg-slate-900 text-white rounded-lg border border-slate-700 min-w-[120px]">
-                <strong className="block text-yellow-400 uppercase text-[10px] font-black">{report.tipo}</strong>
+                <strong className={`block uppercase text-[10px] font-black ${report.tipo === 'Camino Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>{report.tipo}</strong>
                 <div className="h-px bg-slate-700 my-1" />
                 <div className="text-[8px] text-slate-400 font-black uppercase">
                   {isNew ? '✨ RECIÉN REPORTADO' : report.votos_sigue >= 5 ? '⚠️ PELIGRO CONFIRMADO' : 'REPORTE VIAL'}

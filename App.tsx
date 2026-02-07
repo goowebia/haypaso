@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserId } from './lib/supabase';
 import { Report } from './types';
@@ -6,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
@@ -26,6 +27,9 @@ const App: React.FC = () => {
   // Real-time notifications
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
+
+  // Success message specific for "Camino Libre"
+  const [showClearSuccess, setShowClearSuccess] = useState(false);
 
   // PWA Installation
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -80,48 +84,33 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Suscripción en Tiempo Real
   useEffect(() => {
     const channel = supabase
       .channel('realtime-reports')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, (payload) => {
         const newReport = payload.new as Report;
-        // Solo agregar si no existe ya y es activo
         setReports(prev => {
           if (prev.find(r => r.id === newReport.id)) return prev;
-          const updated = [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev];
-          return updated;
+          return [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev];
         });
-        
-        // Efectos de nuevo reporte
         setNewReportToast(newReport);
         setNewlyAddedId(newReport.id);
         playAlertSound();
-        
-        // Limpiar toast y highlight después de unos segundos
         setTimeout(() => setNewReportToast(null), 5000);
         setTimeout(() => setNewlyAddedId(null), 10000);
       })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [playAlertSound]);
 
-  // PWA Logic
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      if (!window.matchMedia('(display-mode: standalone)').matches) {
-        setShowInstallBanner(true);
-      }
+      if (!window.matchMedia('(display-mode: standalone)').matches) setShowInstallBanner(true);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setIsStandalone(true);
-    }
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) setIsStandalone(true);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
@@ -129,59 +118,9 @@ const App: React.FC = () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') console.log('User accepted install');
     setDeferredPrompt(null);
     setShowInstallBanner(false);
   };
-
-  // Manejo de Presence
-  useEffect(() => {
-    const channel = supabase.channel('online-users', { config: { presence: { key: myId } } });
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const newState = channel.presenceState();
-        const users: Record<string, { lat: number, lng: number }> = {};
-        Object.keys(newState).forEach((key) => {
-          if (key === myId) return;
-          const userPresenceList = newState[key];
-          if (userPresenceList && userPresenceList.length > 0) {
-            const userPresence = userPresenceList[0] as any;
-            if (userPresence.lat && userPresence.lng) {
-              users[key] = { lat: userPresence.lat, lng: userPresence.lng };
-            }
-          }
-        });
-        setOnlineUsers(users);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED' && userLocation) {
-          await channel.track({ lat: userLocation[0], lng: userLocation[1], online_at: new Date().toISOString() });
-        }
-      });
-    return () => { supabase.removeChannel(channel); };
-  }, [userLocation, myId]);
-
-  const processPendingReports = useCallback(async () => {
-    if (!navigator.onLine) return;
-    const stored = localStorage.getItem(PENDING_REPORTS_KEY);
-    if (!stored) return;
-    const pending = JSON.parse(stored);
-    if (pending.length === 0) return;
-    setBgUploadStatus('uploading');
-    let successCount = 0;
-    for (const payload of pending) {
-      try {
-        const { error } = await supabase.from('reportes').insert([payload]);
-        if (!error) successCount++;
-      } catch (err) { console.error("Error upload:", err); }
-    }
-    if (successCount > 0) {
-      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([]));
-      setBgUploadStatus('success');
-      fetchReports(true);
-      setTimeout(() => setBgUploadStatus('idle'), 4000);
-    } else { setBgUploadStatus('idle'); }
-  }, [fetchReports]);
 
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
@@ -191,6 +130,9 @@ const App: React.FC = () => {
       longitud: payload.longitud || userLocation?.[1] || -103.7247,
       created_at: new Date().toISOString()
     };
+
+    const isClearRoad = payload.tipo === 'Camino Libre';
+
     if (!navigator.onLine) {
       const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
       localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
@@ -198,11 +140,18 @@ const App: React.FC = () => {
       setTimeout(() => setBgUploadStatus('idle'), 5000);
       return;
     }
+
     setBgUploadStatus('uploading');
     try {
       const { error } = await supabase.from('reportes').insert([finalPayload]);
       if (error) throw error;
+      
       setBgUploadStatus('success');
+      if (isClearRoad) {
+        setShowClearSuccess(true);
+        setTimeout(() => setShowClearSuccess(false), 4000);
+      }
+      
       fetchReports(true);
       setTimeout(() => setBgUploadStatus('idle'), 3000);
     } catch (err) {
@@ -214,12 +163,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchReports();
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') fetchReports(true);
-    }, 60000);
-    window.addEventListener('online', processPendingReports);
-    return () => { clearInterval(interval); window.removeEventListener('online', processPendingReports); };
-  }, [fetchReports, processPendingReports]);
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') fetchReports(true); }, 60000);
+    return () => clearInterval(interval);
+  }, [fetchReports]);
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -240,15 +186,30 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
+      {/* Toast de agradecimiento Camino Libre */}
+      {showClearSuccess && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in fade-in duration-300 w-[90%] max-w-sm">
+          <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] border-2 border-white/20 flex items-center gap-4">
+            <div className="bg-white/20 p-2 rounded-xl">
+              <CheckCircle size={24} strokeWidth={3} />
+            </div>
+            <div>
+              <p className="text-sm font-black uppercase italic leading-tight">¡Gracias!</p>
+              <p className="text-[10px] font-bold opacity-90 uppercase">Reportaste camino despejado</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast de Nuevo Reporte Real-time */}
-      {newReportToast && (
+      {newReportToast && !showClearSuccess && (
         <div 
           onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }}
           className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top fade-in duration-500 w-[90%] max-w-sm cursor-pointer"
         >
-          <div className="bg-[#FFCC00] text-slate-900 px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(255,204,0,0.4)] border-2 border-white/20 flex items-center gap-4">
-            <div className="bg-slate-900 p-2 rounded-xl text-[#FFCC00]">
-              <AlertTriangle size={24} strokeWidth={3} />
+          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
+            <div className="bg-slate-900 p-2 rounded-xl text-white">
+              {newReportToast.tipo === 'Camino Libre' ? <CheckCircle size={24} /> : <AlertTriangle size={24} strokeWidth={3} />}
             </div>
             <div className="flex-1">
               <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Nuevo Reporte</p>
@@ -304,11 +265,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute top-0 left-0 right-0 z-50">
-        <Header 
-          onToggleChat={() => setChatOpen(!chatOpen)} 
-          soundEnabled={soundEnabled} 
-          onToggleSound={() => setSoundEnabled(!soundEnabled)} 
-        />
+        <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
       </div>
 
       <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ease-in-out shadow-2xl ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -330,12 +287,7 @@ const App: React.FC = () => {
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'CERRAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1 scroll-smooth">
-          <ReportList 
-            reports={reports} 
-            loading={loading} 
-            highlightId={newlyAddedId}
-            onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(16.5); if (window.innerWidth < 768) setPanelOpen(false); }} 
-          />
+          <ReportList reports={reports} loading={loading} highlightId={newlyAddedId} onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(16.5); if (window.innerWidth < 768) setPanelOpen(false); }} />
           <div className="h-32" />
         </div>
       </div>

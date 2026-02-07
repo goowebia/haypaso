@@ -1,9 +1,10 @@
+
 import React, { useState } from 'react';
 import { Report, ReportType } from '../types';
 import { 
   Clock, X, Maximize2, Loader2, 
   Gauge, AlertOctagon, Shield, 
-  HardHat, Car, AlertTriangle, Info 
+  HardHat, Car, AlertTriangle, Info, CheckCircle2
 } from 'lucide-react';
 import { supabase, getUserId } from '../lib/supabase';
 
@@ -22,9 +23,11 @@ const formatTimeAgo = (dateString: string) => {
 
 const getCategoryConfig = (type: ReportType) => {
   switch (type) {
+    case 'Camino Libre':
+      return { icon: CheckCircle2, color: 'text-emerald-500', fill: 'none' };
     case 'Accidente':
     case 'Alto Total':
-    case 'Clima':
+      // Fix: Removed 'Clima' as it is not present in ReportType
       return { icon: AlertOctagon, color: 'text-red-500', fill: 'none' };
     case 'Tráfico Pesado':
       return { icon: Gauge, color: 'text-orange-500', fill: 'none' };
@@ -78,6 +81,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   };
 
   const isAlert = localSigue >= 5;
+  const isClear = report.tipo === 'Camino Libre';
   const hasImage = report.fotos && report.fotos.length > 0;
   const config = getCategoryConfig(report.tipo);
   const CategoryIcon = isAlert ? AlertTriangle : config.icon;
@@ -88,6 +92,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
         onClick={() => onClick(report.latitud, report.longitud)}
         className={`bg-slate-800/60 border rounded-2xl p-3 mb-2.5 active:scale-[0.98] transition-all cursor-pointer shadow-md relative overflow-hidden ${
           isNew ? 'animate-[pulse-flash_2s_infinite] border-[#FFCC00]' : 
+          isClear ? 'border-emerald-500/30 bg-emerald-500/5' :
           isAlert ? 'border-yellow-400/50 bg-yellow-400/5' : 'border-slate-700/50'
         }`}
       >
@@ -113,10 +118,10 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
               <div className="flex items-center gap-2 min-w-0">
                 <CategoryIcon 
                   size={16} 
-                  className={isAlert ? 'text-yellow-400' : config.color} 
+                  className={isAlert ? 'text-yellow-400' : isClear ? 'text-emerald-500' : config.color} 
                   fill={isAlert ? "currentColor" : "none"} 
                 />
-                <h3 className={`font-black text-[11px] uppercase tracking-wider truncate ${isAlert ? 'text-yellow-400' : 'text-slate-400'}`}>
+                <h3 className={`font-black text-[11px] uppercase tracking-wider truncate ${isAlert ? 'text-yellow-400' : isClear ? 'text-emerald-500' : 'text-slate-400'}`}>
                   {report.tipo}
                 </h3>
               </div>
