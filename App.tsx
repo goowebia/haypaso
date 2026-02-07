@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, getUserId } from './lib/supabase';
 import { Report } from './types';
@@ -72,7 +71,7 @@ const App: React.FC = () => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Solo mostrar si no se ha ignorado antes en esta sesión y no estamos en standalone
+      // Solo mostrar si no estamos ya en modo standalone
       if (!window.matchMedia('(display-mode: standalone)').matches) {
         setShowInstallBanner(true);
       }
@@ -115,9 +114,12 @@ const App: React.FC = () => {
         
         Object.keys(newState).forEach((key) => {
           if (key === myId) return;
-          const userPresence = newState[key][0] as any;
-          if (userPresence.lat && userPresence.lng) {
-            users[key] = { lat: userPresence.lat, lng: userPresence.lng };
+          const userPresenceList = newState[key];
+          if (userPresenceList && userPresenceList.length > 0) {
+            const userPresence = userPresenceList[0] as any;
+            if (userPresence.lat && userPresence.lng) {
+              users[key] = { lat: userPresence.lat, lng: userPresence.lng };
+            }
           }
         });
         setOnlineUsers(users);
@@ -243,23 +245,23 @@ const App: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
       
-      {/* Banner de Instalación (Android) */}
+      {/* Banner de Instalación */}
       {showInstallBanner && !isStandalone && (
         <div className="fixed bottom-28 left-4 right-4 z-[100] animate-in slide-in-from-bottom duration-500">
-          <div className="bg-slate-800 border-2 border-yellow-400/50 p-4 rounded-3xl shadow-2xl flex items-center justify-between backdrop-blur-xl">
+          <div className="bg-slate-800 border-2 border-[#FFCC00]/50 p-4 rounded-3xl shadow-2xl flex items-center justify-between backdrop-blur-xl">
             <div className="flex items-center gap-3">
-              <div className="bg-yellow-400 p-2 rounded-xl text-slate-900">
+              <div className="bg-[#FFCC00] p-2 rounded-xl text-slate-900 shadow-lg shadow-[#FFCC00]/20">
                 <Download size={20} />
               </div>
               <div>
-                <p className="text-xs font-black uppercase tracking-tight text-white">Instalar App en el inicio</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Acceso rápido y offline</p>
+                <p className="text-xs font-black uppercase tracking-tight text-white">Instalar Hay Paso</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">Acceso directo y offline</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button 
                 onClick={handleInstallClick}
-                className="bg-yellow-400 text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
+                className="bg-[#FFCC00] text-slate-900 px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-[#FFCC00]/20"
               >
                 Instalar
               </button>
@@ -275,18 +277,18 @@ const App: React.FC = () => {
       {bgUploadStatus !== 'idle' && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
           <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
-            bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-yellow-400' : 
+            bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
             bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' :
             'bg-emerald-500/90 border-emerald-400'
           }`}>
             {bgUploadStatus === 'uploading' && (
-              <><Loader2 className="animate-spin text-yellow-400" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Enviando...</span></>
+              <><Loader2 className="animate-spin text-[#FFCC00]" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</span></>
             )}
             {bgUploadStatus === 'offline' && (
-              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Modo Offline. Guardado.</span></>
+              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Guardado Offline</span></>
             )}
             {bgUploadStatus === 'success' && (
-              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte enviado</span></>
+              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte Enviado</span></>
             )}
           </div>
         </div>
@@ -312,11 +314,11 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
-        <button onClick={toggleFollow} className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-yellow-400 text-slate-900 border-yellow-500 shadow-yellow-400/40' : 'bg-slate-900/80 text-yellow-400 border-yellow-400/20 backdrop-blur-md'}`}>
+        <button onClick={toggleFollow} className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
 
-        <button onClick={() => setShowForm(true)} className="bg-yellow-400 text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(250,204,21,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center">
+        <button onClick={() => setShowForm(true)} className="bg-[#FFCC00] text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(255,204,0,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center">
           <Plus size={32} strokeWidth={4} />
         </button>
       </div>
@@ -324,7 +326,7 @@ const App: React.FC = () => {
       <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out ${panelOpen ? 'h-[70vh]' : 'h-24 pb-[env(safe-area-inset-bottom)]'}`}>
         <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer">
           <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3 shadow-inner" />
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'BAJAR PANEL' : `${reports.length} ACTIVOS`}</p>
+          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'CERRAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1">
           <ReportList reports={reports} loading={loading} onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(16.5); if (window.innerWidth < 768) setPanelOpen(false); }} />

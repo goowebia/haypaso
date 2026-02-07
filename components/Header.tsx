@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Play, Bell, BellOff, BellRing, MessageSquare } from 'lucide-react';
 
@@ -28,7 +27,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
     if (permission === 'granted') {
       new Notification("¡Notificaciones activadas!", {
         body: "Te avisaremos sobre accidentes pesados y obras en tiempo real.",
-        icon: 'https://picsum.photos/192/192'
+        icon: 'https://placehold.co/192/192/FFCC00/000000?text=%E2%96%B2'
       });
     }
   };
@@ -36,15 +35,15 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
   return (
     <header className="bg-slate-900/80 backdrop-blur-md border-b border-white/5 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-4 flex items-center justify-between shadow-sm z-40">
       <div className="flex items-center gap-3">
-        <div className="bg-yellow-400 p-2 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-400/20">
+        <div className="bg-[#FFCC00] p-2 rounded-xl flex items-center justify-center shadow-lg shadow-[#FFCC00]/20">
           <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />
         </div>
         <div>
-          <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase">
+          <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase italic">
             Hay Paso
           </h1>
-          <p className="text-[9px] font-black text-yellow-400 uppercase tracking-widest leading-none mt-1">
-            TIEMPO REAL
+          <p className="text-[9px] font-black text-[#FFCC00] uppercase tracking-widest leading-none mt-1">
+            EN VIVO
           </p>
         </div>
       </div>
@@ -64,7 +63,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread }) => {
           onClick={requestPermission}
           className={`p-2.5 rounded-full transition-all active:scale-90 ${
             notifStatus === 'granted' 
-              ? 'bg-yellow-400 text-slate-900 shadow-lg shadow-yellow-400/20' 
+              ? 'bg-[#FFCC00] text-slate-900 shadow-lg shadow-[#FFCC00]/20' 
               : notifStatus === 'denied'
                 ? 'bg-red-500/10 text-red-500'
                 : 'bg-slate-800 text-slate-400'
