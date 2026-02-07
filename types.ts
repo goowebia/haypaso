@@ -20,6 +20,8 @@ export interface Report {
   estatus: ReportStatus;
   votos_sigue: number;
   votos_despejado: number;
+  es_admin?: boolean;
+  fuente?: string;
 }
 
 export interface ChatMessage {

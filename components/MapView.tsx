@@ -2,8 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
-// Added missing Clock import from lucide-react
-import { Clock } from 'lucide-react';
+import { Clock, Star } from 'lucide-react';
 import { Report } from '../types';
 
 interface MapViewProps {
@@ -13,6 +12,9 @@ interface MapViewProps {
   userLocation: [number, number] | null;
   onlineUsers: Record<string, { lat: number, lng: number }>;
   onMapInteraction?: () => void;
+  adminSelectionMode?: boolean;
+  onAdminCoordsSelect?: (lat: number, lng: number) => void;
+  selectedAdminCoords?: [number, number] | null;
 }
 
 const formatTimeAgo = (dateString: string) => {
@@ -24,13 +26,30 @@ const formatTimeAgo = (dateString: string) => {
   return `Hace ${hours} horas`;
 };
 
-const MapController = ({ center, zoom, onInteraction }: { center: [number, number], zoom: number, onInteraction?: () => void }) => {
+const MapController = ({ 
+  center, 
+  zoom, 
+  onInteraction, 
+  adminSelectionMode, 
+  onAdminCoordsSelect 
+}: { 
+  center: [number, number], 
+  zoom: number, 
+  onInteraction?: () => void,
+  adminSelectionMode?: boolean,
+  onAdminCoordsSelect?: (lat: number, lng: number) => void
+}) => {
   const map = useMap();
   
   useMapEvents({
     dragstart: () => onInteraction?.(),
     zoomstart: () => onInteraction?.(),
     touchmove: () => onInteraction?.(),
+    click: (e) => {
+      if (adminSelectionMode && onAdminCoordsSelect) {
+        onAdminCoordsSelect(e.latlng.lat, e.latlng.lng);
+      }
+    }
   });
 
   useEffect(() => {
@@ -78,7 +97,7 @@ const pulsingMarkerStyle = `
   }
 `;
 
-const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = false) => {
+const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = false, isAdmin: boolean = false) => {
   let color = '#facc15'; 
   if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
   if (type === 'Tráfico Pesado') color = '#f97316'; 
@@ -87,6 +106,15 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
   if (type.startsWith('Policía')) color = '#3b82f6'; 
 
   const isClear = type === 'Libre';
+
+  // Badge de admin (Estrella dorada)
+  const adminBadge = isAdmin ? `
+    <div style="position: absolute; top: -10px; right: -10px; background: #FFD700; border: 2px solid white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="#000" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+      </svg>
+    </div>
+  ` : '';
 
   const alertIcon = votosSigue >= 5 ? `
     <svg width="60" height="60" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.7));">
@@ -110,6 +138,7 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
       <div style="position: relative; display: flex; align-items: center; justify-content: center;">
         ${pulseRing}
         ${alertIcon}
+        ${adminBadge}
       </div>
     `,
     iconSize: [60, 60],
@@ -118,7 +147,7 @@ const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = fa
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onlineUsers, onMapInteraction }) => {
+const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onlineUsers, onMapInteraction, adminSelectionMode, onAdminCoordsSelect, selectedAdminCoords }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
 
@@ -128,10 +157,27 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
     return () => { clearInterval(tInterval); clearInterval(nInterval); };
   }, []);
 
+  const adminTargetIcon = L.divIcon({
+    className: 'admin-target-marker',
+    html: `
+      <div style="width: 40px; height: 40px; border: 4px solid #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(239, 68, 68, 0.2);">
+        <div style="width: 10px; height: 10px; background: #ef4444; border-radius: 50%;"></div>
+      </div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+
   return (
     <MapContainer center={center} zoom={zoom} zoomControl={false} style={{ height: '100%', width: '100%', position: 'absolute' }} className="z-0">
       <TileLayer key={trafficKey} attribution='&copy; Google Maps' url={`https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}&t=${trafficKey}`} />
-      <MapController center={center} zoom={zoom} onInteraction={onMapInteraction} />
+      <MapController 
+        center={center} 
+        zoom={zoom} 
+        onInteraction={onMapInteraction} 
+        adminSelectionMode={adminSelectionMode}
+        onAdminCoordsSelect={onAdminCoordsSelect}
+      />
       
       {reports.map((report) => {
         const reportTime = new Date(report.created_at).getTime();
@@ -141,27 +187,34 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
           <Marker 
             key={report.id} 
             position={[report.latitud, report.longitud]}
-            icon={getReportIcon(report.tipo, report.votos_sigue, isNew)}
-            zIndexOffset={report.votos_sigue >= 5 ? 500 : 100}
+            icon={getReportIcon(report.tipo, report.votos_sigue, isNew, report.es_admin)}
+            zIndexOffset={report.es_admin ? 600 : report.votos_sigue >= 5 ? 500 : 100}
           >
             <Popup closeButton={false}>
-              <div className="p-2 text-center bg-slate-900 text-white rounded-xl border border-white/10 shadow-2xl min-w-[140px] animate-in fade-in zoom-in duration-200">
+              <div className="p-2 text-center bg-slate-900 text-white rounded-xl border border-white/10 shadow-2xl min-w-[140px]">
                 <div className="flex items-center justify-center gap-1.5 text-[9px] font-black text-slate-400 mb-1.5 uppercase tracking-tighter">
                   <Clock size={10} className="text-yellow-400" />
                   {formatTimeAgo(report.created_at)}
                 </div>
                 <div className="h-px bg-white/5 w-full mb-1.5" />
+                {report.es_admin && (
+                  <div className="flex items-center justify-center gap-1 text-[8px] font-black text-yellow-400 mb-1">
+                    <Star size={8} fill="currentColor" /> REPORTE OFICIAL
+                  </div>
+                )}
                 <strong className={`block uppercase text-[11px] font-black italic tracking-tighter ${report.tipo === 'Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>
                   {report.tipo}
                 </strong>
-                <div className="text-[8px] text-slate-500 font-bold uppercase mt-1 tracking-widest">
-                  {isNew ? '✨ RECIÉN REPORTADO' : report.votos_sigue >= 5 ? '⚠️ CONFIRMADO POR VARIOS' : 'VÍA REVISADA'}
-                </div>
+                {report.fuente && <div className="text-[7px] text-slate-500 font-bold uppercase mt-1 truncate">Fuente: {report.fuente}</div>}
               </div>
             </Popup>
           </Marker>
         );
       })}
+
+      {selectedAdminCoords && (
+        <Marker position={selectedAdminCoords} icon={adminTargetIcon} />
+      )}
 
       {userLocation && (
         <CircleMarker center={userLocation} radius={12} zIndexOffset={1000} pathOptions={{ fillColor: '#3b82f6', fillOpacity: 1, color: '#fff', weight: 3, className: 'gps-marker' }} />

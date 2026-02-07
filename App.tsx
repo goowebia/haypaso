@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, WifiOff, Download, X as CloseIcon, BellRing, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
@@ -24,6 +24,11 @@ const App: React.FC = () => {
   const [followUser, setFollowUser] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+
+  // Estados de Administrador
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminCoordsSelect, setAdminCoordsSelect] = useState(false);
+  const [selectedAdminCoords, setSelectedAdminCoords] = useState<[number, number] | null>(null);
   
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
@@ -33,26 +38,18 @@ const App: React.FC = () => {
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const playAlertSound = useCallback(() => {
-    if (soundEnabled && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.log("Audio blocked by browser", e));
+  const handleAdminRequest = () => {
+    if (isAdmin) {
+      setIsAdmin(false);
+      setAdminCoordsSelect(false);
+      setSelectedAdminCoords(null);
+      return;
     }
-  }, [soundEnabled]);
-
-  const checkRealConnection = async (): Promise<boolean> => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      await fetch('https://www.google.com/favicon.ico', { 
-        mode: 'no-cors', 
-        signal: controller.signal,
-        cache: 'no-store'
-      });
-      clearTimeout(timeoutId);
-      return true;
-    } catch (e) {
-      return false;
+    const pin = prompt("Ingrese clave de despachador:");
+    if (pin === "admin123") {
+      setIsAdmin(true);
+    } else if (pin !== null) {
+      alert("Acceso denegado");
     }
   };
 
@@ -60,7 +57,6 @@ const App: React.FC = () => {
     try {
       if (!isSilent) setLoading(true);
       const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
       const { data: reportsData, error: reportsError } = await supabase
         .from('reportes')
         .select(`*, validaciones (voto)`)
@@ -81,73 +77,22 @@ const App: React.FC = () => {
         });
         setReports(processedReports.filter(r => !(r.votos_despejado > r.votos_sigue && r.votos_despejado >= 2)));
       }
-    } catch (err) {
-      console.error("Sync error:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   }, []);
 
-  const processPendingReports = useCallback(async () => {
-    const stored = localStorage.getItem(PENDING_REPORTS_KEY);
-    if (!stored) { setPendingCount(0); return; }
-    
-    let pending = JSON.parse(stored);
-    const now = new Date();
-    pending = pending.filter((p: any) => (now.getTime() - new Date(p.created_at).getTime()) < (24 * 60 * 60 * 1000));
-    localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(pending));
-    setPendingCount(pending.length);
-
-    if (pending.length === 0) return;
-    if (!navigator.onLine || !(await checkRealConnection())) return;
-
-    setBgUploadStatus('syncing');
-    pending.sort((a: any, b: any) => (a.tipo === 'Libre' ? -1 : 1));
-
-    const currentQueue = [...pending];
-    for (const payload of pending) {
-      try {
-        const { error, status } = await supabase.from('reportes').insert([payload]);
-        if (!error && (status === 201 || status === 200)) {
-          const idx = currentQueue.findIndex(p => p.created_at === payload.created_at && p.tipo === payload.tipo);
-          if (idx > -1) {
-            currentQueue.splice(idx, 1);
-            localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify(currentQueue));
-            setPendingCount(currentQueue.length);
-          }
-        } else { break; }
-      } catch (err) { break; }
+  const playAlertSound = useCallback(() => {
+    if (soundEnabled && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
     }
+  }, [soundEnabled]);
 
-    if (currentQueue.length < pending.length) {
-      setBgUploadStatus('success');
-      fetchReports(true);
-      setTimeout(() => setBgUploadStatus('idle'), 3000);
-    } else {
-      setBgUploadStatus('idle');
-    }
-  }, [fetchReports]);
+  useEffect(() => { fetchReports(); }, [fetchReports]);
 
   useEffect(() => {
-    const initApp = async () => {
-      // LLAMADA RPC PARA LIMPIEZA AUTOMÁTICA
-      try {
-        await supabase.rpc('limpiar_reportes_viejos');
-      } catch (e) {
-        console.warn("RPC limpiar_reportes_viejos no disponible aún.");
-      }
-      fetchReports();
-    };
-    initApp();
-  }, [fetchReports]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('realtime-reports')
+    const channel = supabase.channel('realtime-reports')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reportes' }, (payload) => {
         const newReport = payload.new as Report;
-        const limit = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        if (new Date(newReport.created_at) < limit) return;
         setReports(prev => prev.find(r => r.id === newReport.id) ? prev : [{...newReport, votos_sigue: 0, votos_despejado: 0}, ...prev]);
         setNewReportToast(newReport);
         setNewlyAddedId(newReport.id);
@@ -156,165 +101,108 @@ const App: React.FC = () => {
         setTimeout(() => setNewlyAddedId(null), 10000);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reportes' }, async (payload) => {
-        // BORRADO FÍSICO DE IMÁGENES
-        // Requiere REPLICA IDENTITY FULL en la tabla para que payload.old tenga las fotos
         const oldData = payload.old as any;
-        if (oldData?.fotos && oldData.fotos.length > 0) {
-          const pathsToDelete = oldData.fotos.map((url: string) => {
-            const parts = url.split('/');
-            return parts[parts.length - 1];
-          }).filter(Boolean);
-          
-          if (pathsToDelete.length > 0) {
-            console.log("Limpiando Storage físicamente:", pathsToDelete);
-            await supabase.storage.from('imagenes').remove(pathsToDelete);
-          }
+        if (oldData?.fotos?.length > 0) {
+          const paths = oldData.fotos.map((url: string) => url.split('/').pop()).filter(Boolean);
+          await supabase.storage.from('imagenes').remove(paths);
         }
         fetchReports(true);
-      })
-      .subscribe();
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [playAlertSound, fetchReports]);
 
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
-    const finalPayload = {
-      ...payload,
-      latitud: payload.latitud || userLocation?.[0] || 19.2433,
-      longitud: payload.longitud || userLocation?.[1] || -103.7247,
-      created_at: new Date().toISOString()
-    };
-
-    const isActuallyOnline = navigator.onLine && (await checkRealConnection());
-
-    if (!isActuallyOnline) {
-      const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
-      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
-      setPendingCount(stored.length + 1);
-      setBgUploadStatus('offline');
-      setTimeout(() => setBgUploadStatus('idle'), 3000);
-      return;
-    }
-
     setBgUploadStatus('uploading');
     try {
-      const { error, status } = await supabase.from('reportes').insert([finalPayload]);
-      if (!error && (status === 201 || status === 200)) {
+      const { error } = await supabase.from('reportes').insert([payload]);
+      if (!error) {
         setBgUploadStatus('success');
-        if (payload.tipo === 'Libre') {
-          setShowClearSuccess(true);
-          setTimeout(() => setShowClearSuccess(false), 4000);
-        }
+        if (payload.tipo === 'Libre') setShowClearSuccess(true);
+        setTimeout(() => setShowClearSuccess(false), 4000);
         fetchReports(true);
-      } else {
-        throw new Error("Insert error");
-      }
+      } else throw error;
       setTimeout(() => setBgUploadStatus('idle'), 3000);
     } catch (err) {
-      const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
-      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
-      setPendingCount(stored.length + 1);
       setBgUploadStatus('offline');
+      setTimeout(() => setBgUploadStatus('idle'), 3000);
     }
   };
 
   useEffect(() => {
-    const syncInterval = setInterval(processPendingReports, 15000);
-    const refreshInterval = setInterval(() => { if (document.visibilityState === 'visible') fetchReports(true); }, 60000);
-    window.addEventListener('online', processPendingReports);
-    return () => { clearInterval(syncInterval); clearInterval(refreshInterval); window.removeEventListener('online', processPendingReports); };
-  }, [fetchReports, processPendingReports]);
-
-  useEffect(() => {
     if ("geolocation" in navigator) {
-      watchId.current = navigator.geolocation.watchPosition(
-        (pos) => {
-          const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-          setUserLocation(coords);
-          if (followUser) setMapCenter(coords);
-        },
-        null, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
+      watchId.current = navigator.geolocation.watchPosition((pos) => {
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setUserLocation(coords);
+        if (followUser) setMapCenter(coords);
+      }, null, { enableHighAccuracy: true });
     }
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser]);
 
   return (
-    <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
+    <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
-      {pendingCount > 0 && bgUploadStatus !== 'syncing' && (
-        <div className="fixed top-24 right-4 z-[120] flex items-center gap-2 bg-orange-500 text-white px-3 py-1.5 rounded-full shadow-lg border border-white/20 animate-pulse">
-          <Clock size={16} />
-          <span className="text-[10px] font-black">{pendingCount}</span>
+      {isAdmin && (
+        <div className="fixed top-24 left-4 z-[50] flex flex-col gap-2">
+          <button 
+            onClick={() => setAdminCoordsSelect(!adminCoordsSelect)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-[10px] uppercase shadow-2xl border-2 transition-all active:scale-95 ${adminCoordsSelect ? 'bg-red-500 border-white text-white' : 'bg-slate-900/90 border-red-500/50 text-red-400 backdrop-blur-xl'}`}
+          >
+            <Crosshair size={18} /> {adminCoordsSelect ? 'Tocando Mapa...' : 'Clic en Mapa p/ Reporte'}
+          </button>
         </div>
       )}
 
       {showClearSuccess && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in fade-in duration-300 w-[90%] max-w-sm">
-          <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-[0_10px_40px_rgba(16,185,129,0.4)] border-2 border-white/20 flex items-center gap-4">
-            <div className="bg-white/20 p-2 rounded-xl"><CheckCircle size={24} strokeWidth={3} /></div>
-            <div>
-              <p className="text-sm font-black uppercase italic leading-tight">¡Confirmado!</p>
-              <p className="text-[10px] font-bold opacity-90 uppercase">Vía marcada como libre</p>
-            </div>
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in w-[90%] max-w-sm">
+          <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4">
+            <CheckCircle2 size={24} />
+            <div><p className="text-sm font-black uppercase italic leading-tight">Vía Libre</p><p className="text-[10px] font-bold opacity-90 uppercase tracking-widest">Reporte actualizado</p></div>
           </div>
         </div>
       )}
 
       {newReportToast && !showClearSuccess && (
-        <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }}
-             className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top fade-in duration-500 w-[90%] max-w-sm cursor-pointer">
+        <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
           <div className={`${newReportToast.tipo === 'Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
-            <div className="bg-slate-900 p-2 rounded-xl text-white">
-              {newReportToast.tipo === 'Libre' ? <CheckCircle size={24} /> : <AlertTriangle size={24} strokeWidth={3} />}
-            </div>
+            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <Plus size={24} />}
             <div className="flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest leading-none mb-1">Nuevo Reporte</p>
+              <p className="text-[10px] font-black uppercase leading-none mb-1">{newReportToast.es_admin ? 'REPORTE OFICIAL' : 'NUEVO REPORTE'}</p>
               <p className="text-sm font-black uppercase italic leading-tight">{newReportToast.tipo}</p>
-              <p className="text-[10px] font-bold opacity-80 uppercase truncate max-w-[180px]">{newReportToast.descripcion || 'Vía revisada'}</p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing' || bgUploadStatus === 'success') && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500 w-[90%] max-w-sm">
-          <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
-            bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-[#FFCC00]' : 
-            bgUploadStatus === 'syncing' ? 'bg-emerald-600/90 border-emerald-400' : 'bg-emerald-500/90 border-emerald-400'
-          }`}>
-            {(bgUploadStatus === 'uploading' || bgUploadStatus === 'syncing') && (
-              <><Loader2 className="animate-spin text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white italic">Conectando...</span></>
-            )}
-            {bgUploadStatus === 'success' && (<><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">¡Sincronizado!</span></>)}
           </div>
         </div>
       )}
 
       <div className="absolute inset-0 z-0">
-        <MapView reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={{}} onMapInteraction={() => setFollowUser(false)} />
+        <MapView 
+          reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={{}} onMapInteraction={() => setFollowUser(false)} 
+          adminSelectionMode={adminCoordsSelect} onAdminCoordsSelect={(lat, lng) => setSelectedAdminCoords([lat, lng])} selectedAdminCoords={selectedAdminCoords}
+        />
       </div>
+      
       <div className="absolute top-0 left-0 right-0 z-50">
-        <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} />
+        <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} isAdmin={isAdmin} onAdminRequest={handleAdminRequest} />
       </div>
-      <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ease-in-out shadow-2xl ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+
+      <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <ChatPanel onClose={() => setChatOpen(false)} />
       </div>
 
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
-        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} 
-                className={`p-4 rounded-full shadow-2xl active:scale-90 transition-all border-2 flex items-center justify-center ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800] shadow-[#FFCC00]/40' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20 backdrop-blur-md'}`}>
+        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} className={`p-4 rounded-full shadow-2xl active:scale-90 border-2 transition-all ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800]' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20'}`}>
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
-        <button onClick={() => setShowForm(true)} className="bg-[#FFCC00] text-slate-900 p-5 rounded-full shadow-[0_0_30px_rgba(255,204,0,0.4)] active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center">
+        <button onClick={() => setShowForm(true)} className={`p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center ${isAdmin ? 'bg-red-500 text-white' : 'bg-[#FFCC00] text-slate-900'}`}>
           <Plus size={32} strokeWidth={4} />
         </button>
       </div>
 
-      <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out ${panelOpen ? 'h-[70vh]' : 'h-24 pb-[env(safe-area-inset-bottom)]'}`}>
+      <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ${panelOpen ? 'h-[70vh]' : 'h-24'}`}>
         <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer">
-          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3 shadow-inner" />
+          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'CERRAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1 scroll-smooth">
@@ -326,7 +214,10 @@ const App: React.FC = () => {
       {showForm && (
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-2xl border border-white/10">
-            <ReportForm onClose={(didSend, payload) => { if (didSend && payload) handleBackgroundUpload(payload); else setShowForm(false); }} />
+            <ReportForm 
+              isAdmin={isAdmin} externalCoords={selectedAdminCoords}
+              onClose={(didSend, payload) => { if (didSend && payload) handleBackgroundUpload(payload); setShowForm(false); }} 
+            />
           </div>
         </div>
       )}
