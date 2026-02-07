@@ -86,7 +86,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Memoria Offline Activada</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Subida mixta activa (Cámara/Galería)</p>
         </div>
         <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90">
           <X size={24} />
@@ -116,23 +116,24 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             {isCompressing ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-            {isCompressing ? '...' : 'Foto'}
+            {isCompressing ? '...' : 'Evidencia'}
           </button>
           <button onClick={() => videoInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             <Video size={20} /> Video
           </button>
         </div>
 
-        <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
-        <input type="file" ref={videoInputRef} accept="video/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
+        {/* Sin capture="environment" permite Galería + Cámara en móviles modernos */}
+        <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
+        <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
         <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50">
           <div className="relative w-32 h-32 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
             {media.length > 0 ? (
               <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
-            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Sin Foto</span>}
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Previsualización</span>}
           </div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentario..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32" />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario rápido..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32" />
         </div>
       </div>
 

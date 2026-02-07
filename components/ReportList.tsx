@@ -33,14 +33,14 @@ const ReportList: React.FC<ReportListProps> = ({ reports, loading, onReportClick
   }
 
   return (
-    <div className="px-4 py-2">
-      <div className="flex items-center justify-between mb-4 sticky top-0 bg-slate-900/10 backdrop-blur-sm py-2 z-10">
-        <h2 className="text-white font-black tracking-tighter text-[10px] uppercase flex items-center gap-2">
+    <div className="px-3 py-1">
+      <div className="flex items-center justify-between mb-3 sticky top-0 bg-slate-900/10 backdrop-blur-sm py-2 z-10">
+        <h2 className="text-white font-black tracking-tighter text-[9px] uppercase flex items-center gap-2">
           <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
-          Historial Reciente
+          Historial Compacto
         </h2>
-        <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded-full font-black">
-          {reports.length} REGISTROS
+        <span className="bg-slate-800 text-slate-500 text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
+          {reports.length} ACTIVOS
         </span>
       </div>
       <div className="pb-28">
