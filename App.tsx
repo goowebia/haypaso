@@ -39,12 +39,15 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handleAdminRequest = () => {
+    // Si ya es admin, el mismo paso (pulsación larga) lo desactiva
     if (isAdmin) {
       setIsAdmin(false);
       setAdminCoordsSelect(false);
       setSelectedAdminCoords(null);
       return;
     }
+    
+    // Si no es admin, pide clave
     const pin = prompt("Ingrese clave de despachador:");
     if (pin === "admin123") {
       setIsAdmin(true);

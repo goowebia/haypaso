@@ -24,7 +24,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   const handleTouchStart = () => {
     longPressTimer.current = window.setTimeout(() => {
       onAdminRequest();
-    }, 2000); // 2 segundos de presión para activar admin
+    }, 2000); // 2 segundos de presión para activar/desactivar admin
   };
 
   const handleTouchEnd = () => {
@@ -50,6 +50,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
         onMouseUp={handleTouchEnd}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onContextMenu={(e) => e.preventDefault()} // CRÍTICO: Evita el menú de iOS/Android al dejar presionado
       >
         <div className={`p-2 rounded-xl flex items-center justify-center shadow-lg transition-colors ${isAdmin ? 'bg-red-500 shadow-red-500/20' : 'bg-[#FFCC00] shadow-[#FFCC00]/20'}`}>
           {isAdmin ? <ShieldAlert size={20} className="text-white" /> : <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />}
