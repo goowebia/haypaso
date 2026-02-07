@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, MapPin, Camera, Video, Loader2 } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2 } from 'lucide-react';
 import { ReportType } from '../types';
 import imageCompression from 'browser-image-compression';
 
@@ -19,11 +19,11 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Intentar obtener GPS pero no bloquear al usuario
+    // Captura prioritaria de ubicación para reporte offline
     navigator.geolocation.getCurrentPosition(
       (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => console.warn("GPS no disponible aún, usando respaldo al enviar."),
-      { enableHighAccuracy: true, timeout: 5000 }
+      null,
+      { enableHighAccuracy: true, timeout: 4000 }
     );
   }, []);
 
@@ -34,7 +34,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     if (type === 'image') {
       setIsCompressing(true);
       try {
-        const compressedFile = await imageCompression(file, { maxSizeMB: 0.4, maxWidthOrHeight: 1200, useWebWorker: true });
+        const compressedFile = await imageCompression(file, { maxSizeMB: 0.3, maxWidthOrHeight: 1200, useWebWorker: true });
         const reader = new FileReader();
         reader.onloadend = () => {
           setMedia([{ type, data: reader.result as string, file: compressedFile }]);
@@ -52,7 +52,6 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   };
 
   const handleSend = () => {
-    // Si no hay categoría, ni comentario, ni media, no hacer nada
     if (!selectedType && comment.trim().length === 0 && media.length === 0) return;
 
     const payload = {
@@ -60,8 +59,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
       descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Evidencia enviada"),
       fotos: media.filter(m => m.type === 'image').map(m => m.data),
       video_url: media.find(m => m.type === 'video')?.data || null,
-      latitud: coords?.lat || null, // App.tsx manejará el respaldo si es null
-      longitud: coords?.lng || null,
+      latitud: coords?.lat,
+      longitud: coords?.lng,
       estatus: 'activo'
     };
 
@@ -80,7 +79,6 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     { label: 'Clima', icon: AlertOctagon, color: 'bg-cyan-500' },
   ];
 
-  // Habilitar si hay categoría, texto o media
   const canSubmit = (selectedType !== null || comment.trim().length > 0 || media.length > 0) && !isCompressing;
 
   return (
@@ -88,9 +86,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Compresión activa - Envío inmediato</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Memoria Offline Activada</p>
         </div>
-        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform">
+        <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90">
           <X size={24} />
         </button>
       </div>
@@ -102,7 +100,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
             onClick={() => setSelectedType(selectedType === cat.label ? null : cat.label)}
             className={`flex flex-col items-center justify-center p-4 rounded-3xl border-b-[6px] transition-all active:scale-95 ${
               selectedType === cat.label 
-                ? `${cat.color} border-black/20 scale-105 shadow-2xl shadow-${cat.color.split('-')[1]}-400/40` 
+                ? `${cat.color} border-black/20 scale-105 shadow-2xl` 
                 : 'bg-slate-800/40 border-slate-900 text-slate-500 opacity-60'
             }`}
           >
@@ -116,11 +114,11 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
 
       <div className="space-y-4 mb-6">
         <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => fileInputRef.current?.click()} className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase transition-all ${media.some(m => m.type === 'image') ? 'bg-yellow-400/20 border-yellow-400 text-white' : 'bg-slate-800/80 border-slate-700/50 text-slate-500'}`}>
+          <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             {isCompressing ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-            {isCompressing ? 'PROCESANDO...' : 'Foto'}
+            {isCompressing ? '...' : 'Foto'}
           </button>
-          <button onClick={() => videoInputRef.current?.click()} className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase transition-all ${media.some(m => m.type === 'video') ? 'bg-red-500/20 border-red-500 text-white' : 'bg-slate-800/80 border-slate-700/50 text-slate-500'}`}>
+          <button onClick={() => videoInputRef.current?.click()} className="flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] font-black text-[11px] uppercase bg-slate-800/80 border-slate-700/50 text-slate-500 active:scale-95">
             <Video size={20} /> Video
           </button>
         </div>
@@ -132,9 +130,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           <div className="relative w-32 h-32 shrink-0 rounded-3xl overflow-hidden border-2 border-slate-800 flex items-center justify-center bg-black">
             {media.length > 0 ? (
               <><img src={media[0].data} className="w-full h-full object-cover" /><button onClick={() => setMedia([])} className="absolute -top-1 -right-1 bg-red-600 text-white p-1.5 rounded-full shadow-xl"><X size={12} /></button></>
-            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Sin Evidencia</span>}
+            ) : <span className="text-[10px] font-black text-slate-700 uppercase">Sin Foto</span>}
           </div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Agrega un comentario (opcional)..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32 placeholder:text-slate-700" />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentario..." className="flex-1 bg-transparent text-white font-bold text-sm p-2 focus:outline-none resize-none h-32" />
         </div>
       </div>
 
@@ -143,7 +141,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
           onClick={handleSend}
           disabled={!canSubmit}
           className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all shadow-2xl ${
-            !canSubmit ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-yellow-400 text-slate-900 active:scale-95 hover:brightness-110 shadow-yellow-400/20'
+            !canSubmit ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-yellow-400 text-slate-900 active:scale-95 shadow-yellow-400/20'
           }`}
         >
           <Send size={28} strokeWidth={4} />

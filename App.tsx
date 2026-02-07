@@ -7,7 +7,9 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2 } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, WifiOff } from 'lucide-react';
+
+const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -20,7 +22,8 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   
-  const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'success'>('idle');
+  // Estados de carga y sincronización
+  const [bgUploadStatus, setBgUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'offline'>('idle');
   const watchId = useRef<number | null>(null);
 
   const fetchReports = useCallback(async (isSilent = false) => {
@@ -55,14 +58,87 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Silent Refresh cada 30 segundos
+  // Procesar reportes guardados en offline
+  const processPendingReports = useCallback(async () => {
+    if (!navigator.onLine) return;
+    
+    const stored = localStorage.getItem(PENDING_REPORTS_KEY);
+    if (!stored) return;
+
+    const pending = JSON.parse(stored);
+    if (pending.length === 0) return;
+
+    setBgUploadStatus('uploading');
+    let successCount = 0;
+
+    for (const payload of pending) {
+      try {
+        const { error } = await supabase.from('reportes').insert([payload]);
+        if (!error) successCount++;
+      } catch (err) {
+        console.error("Error subiendo pendiente:", err);
+      }
+    }
+
+    if (successCount > 0) {
+      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([]));
+      setBgUploadStatus('success');
+      fetchReports(true);
+      setTimeout(() => setBgUploadStatus('idle'), 4000);
+    } else {
+      setBgUploadStatus('idle');
+    }
+  }, [fetchReports]);
+
+  // Manejador de envío (con soporte offline)
+  const handleBackgroundUpload = async (payload: any) => {
+    setShowForm(false);
+    
+    // Inyectar ubicación de respaldo si es necesario
+    const finalPayload = {
+      ...payload,
+      latitud: payload.latitud || userLocation?.[0] || 19.2433,
+      longitud: payload.longitud || userLocation?.[1] || -103.7247,
+      created_at: new Date().toISOString() // Congelar tiempo real del reporte
+    };
+
+    if (!navigator.onLine) {
+      const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
+      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
+      setBgUploadStatus('offline');
+      setTimeout(() => setBgUploadStatus('idle'), 5000);
+      return;
+    }
+
+    setBgUploadStatus('uploading');
+    try {
+      const { error } = await supabase.from('reportes').insert([finalPayload]);
+      if (error) throw error;
+      setBgUploadStatus('success');
+      fetchReports(true);
+      setTimeout(() => setBgUploadStatus('idle'), 3000);
+    } catch (err) {
+      // Si falla por red inestable, guardar en cola
+      const stored = JSON.parse(localStorage.getItem(PENDING_REPORTS_KEY) || '[]');
+      localStorage.setItem(PENDING_REPORTS_KEY, JSON.stringify([...stored, finalPayload]));
+      setBgUploadStatus('offline');
+    }
+  };
+
   useEffect(() => {
     fetchReports();
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchReports(true);
     }, 30000);
-    return () => clearInterval(interval);
-  }, [fetchReports]);
+
+    const handleOnline = () => processPendingReports();
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [fetchReports, processPendingReports]);
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -72,21 +148,12 @@ const App: React.FC = () => {
           setUserLocation(coords);
           if (followUser) setMapCenter(coords);
         },
-        (err) => console.error("GPS Error:", err),
+        null,
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
-
-    const channel = supabase
-      .channel('realtime-db')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, () => fetchReports(true))
-      .subscribe();
-      
-    return () => { 
-      if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
-      supabase.removeChannel(channel); 
-    };
-  }, [fetchReports, followUser]);
+    return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
+  }, [followUser]);
 
   const toggleFollow = () => {
     if (userLocation) {
@@ -96,40 +163,24 @@ const App: React.FC = () => {
     }
   };
 
-  const handleBackgroundUpload = async (payload: any) => {
-    setShowForm(false);
-    setBgUploadStatus('uploading');
-    
-    // Si no hay coordenadas en el payload, inyectamos la última ubicación o la de la ruta
-    const finalPayload = {
-      ...payload,
-      latitud: payload.latitud || userLocation?.[0] || 19.2433,
-      longitud: payload.longitud || userLocation?.[1] || -103.7247
-    };
-
-    try {
-      const { error } = await supabase.from('reportes').insert([finalPayload]);
-      if (error) throw error;
-      setBgUploadStatus('success');
-      fetchReports(true);
-      setTimeout(() => setBgUploadStatus('idle'), 3000);
-    } catch (err) {
-      console.error("Upload failed:", err);
-      setBgUploadStatus('idle');
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden font-sans select-none text-slate-100">
+      {/* Sistema de Notificaciones Flotantes */}
       {bgUploadStatus !== 'idle' && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-300">
-          <div className={`flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border ${
-            bgUploadStatus === 'uploading' ? 'bg-slate-800/90 border-yellow-400/50' : 'bg-emerald-500/90 border-emerald-400'
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500">
+          <div className={`flex items-center gap-4 px-6 py-3 rounded-full shadow-2xl backdrop-blur-xl border-2 ${
+            bgUploadStatus === 'uploading' ? 'bg-slate-900/90 border-yellow-400' : 
+            bgUploadStatus === 'offline' ? 'bg-orange-500/90 border-orange-400' :
+            'bg-emerald-500/90 border-emerald-400'
           }`}>
-            {bgUploadStatus === 'uploading' ? (
-              <><Loader2 className="animate-spin text-yellow-400" size={18} /><span className="text-[10px] font-black uppercase tracking-widest">Subiendo reporte...</span></>
-            ) : (
-              <><CheckCircle2 className="text-white" size={18} /><span className="text-[10px] font-black uppercase tracking-widest text-white">¡Listo!</span></>
+            {bgUploadStatus === 'uploading' && (
+              <><Loader2 className="animate-spin text-yellow-400" size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Enviando...</span></>
+            )}
+            {bgUploadStatus === 'offline' && (
+              <><WifiOff className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white text-center">Sin señal. Se enviará al recuperar conexión.</span></>
+            )}
+            {bgUploadStatus === 'success' && (
+              <><CheckCircle2 className="text-white" size={20} /><span className="text-[10px] font-black uppercase tracking-widest text-white">✅ Reporte enviado con éxito</span></>
             )}
           </div>
         </div>
