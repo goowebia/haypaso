@@ -25,7 +25,10 @@ const App: React.FC = () => {
   const fetchReports = useCallback(async () => {
     try {
       setLoading(true);
-      // BARRIDO TOTAL: Traemos reportes y sus validaciones asociadas
+      
+      // CALCULAR LÍMITE DE 24 HORAS
+      const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
       const { data: reportsData, error: reportsError } = await supabase
         .from('reportes')
         .select(`
@@ -33,10 +36,11 @@ const App: React.FC = () => {
           validaciones (voto)
         `)
         .eq('estatus', 'activo')
+        .gt('created_at', limitDate) // FILTRO DE 24 HORAS
         .order('created_at', { ascending: false });
 
       if (reportsError) {
-        console.error("Error en barrido inicial:", reportsError.message);
+        console.error("Error fetching reports:", reportsError.message);
         return;
       }
 
@@ -52,7 +56,8 @@ const App: React.FC = () => {
           };
         });
 
-        // REGLA DE AUTO-LIMPIEZA: Ocultar si hay más despejados que sigue (mínimo 2 votos de despejado)
+        // REGLA DE AUTO-LIMPIEZA POR VOTOS: 
+        // Si hay más votos de "despejado" que de "sigue" (con al menos 2 votos de despejado), se oculta.
         const visibleReports = processedReports.filter(r => {
            if (r.votos_despejado > r.votos_sigue && r.votos_despejado >= 2) return false;
            return true;
@@ -61,7 +66,7 @@ const App: React.FC = () => {
         setReports(visibleReports);
       }
     } catch (err) {
-      console.error("Error crítico de conexión:", err);
+      console.error("Critical connection error:", err);
     } finally {
       setLoading(false);
     }
@@ -80,14 +85,13 @@ const App: React.FC = () => {
             setMapZoom(15);
           }
         },
-        (err) => console.error("Error GPS:", err),
+        (err) => console.error("GPS Error:", err),
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
 
-    // Escucha activa de TODO en el esquema público para sincronización total
     const channel = supabase
-      .channel('global-realtime-sync')
+      .channel('realtime-24h')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, () => fetchReports())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'validaciones' }, () => fetchReports())
       .subscribe();
@@ -128,7 +132,6 @@ const App: React.FC = () => {
 
       {chatOpen && <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] z-[55]" onClick={() => setChatOpen(false)} />}
 
-      {/* Botones Flotantes */}
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
         <button 
           onClick={fetchReports}
@@ -155,12 +158,11 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Panel Inferior */}
       <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ease-out ${panelOpen ? 'h-[70vh]' : 'h-24 pb-[env(safe-area-inset-bottom)]'}`}>
         <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer">
           <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3 shadow-inner" />
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">
-            {panelOpen ? 'BAJAR PANEL' : `${reports.length} REPORTES VISIBLES`}
+            {panelOpen ? 'BAJAR PANEL' : `${reports.length} ACTIVOS (ÚLTIMAS 24H)`}
           </p>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1">

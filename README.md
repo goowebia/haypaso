@@ -1,7 +1,7 @@
 
-# Hay Paso 🚗💨 - Configuración de Base de Datos
+# Hay Paso 🚗💨 - Configuración de Base de Datos (Actualizado 24h)
 
-Ejecuta este script en el **SQL Editor** de tu proyecto en Supabase. Esto solucionará los problemas de visibilidad y hará que los botones de votación funcionen.
+Copia y ejecuta este script en el **SQL Editor** de tu proyecto en Supabase para habilitar todas las funciones, incluyendo la caducidad de 24 horas.
 
 ```sql
 -- 1. Borrar tablas actuales
@@ -63,4 +63,13 @@ begin;
   create publication supabase_realtime;
 commit;
 alter publication supabase_realtime add table reportes, validaciones, chat_mensajes;
+
+-- 8. Función de Limpieza (24 horas)
+create or replace function limpiar_datos_viejos() 
+returns void as $$
+begin
+  delete from reportes where created_at < now() - interval '24 hours';
+  delete from chat_mensajes where created_at < now() - interval '24 hours';
+end;
+$$ language plpgsql;
 ```

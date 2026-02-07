@@ -44,13 +44,16 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
   const removeMedia = () => setMedia([]);
 
   const executeSend = async () => {
-    if (!selectedType || isSubmitting || !coords) return;
+    // Si no hay tipo seleccionado Y no hay media ni comentario, no enviamos nada.
+    const hasEvidence = media.length > 0 || comment.trim().length > 0;
+    if ((!selectedType && !hasEvidence) || isSubmitting || !coords) return;
 
     setIsSubmitting(true);
     try {
       const payload = {
-        tipo: selectedType,
-        descripcion: comment.trim() || `Reporte de ${selectedType}`,
+        // Si el usuario no presionó los botones de arriba, asignamos "Tráfico Lento" por defecto
+        tipo: selectedType || 'Tráfico Lento',
+        descripcion: comment.trim() || (selectedType ? `Reporte de ${selectedType}` : "Reporte rápido con evidencia"),
         fotos: media.filter(m => m.type === 'image').map(m => m.data),
         video_url: media.find(m => m.type === 'video')?.data || null,
         latitud: coords.lat,
@@ -70,7 +73,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
 
     } catch (err) {
       console.error("Error enviando reporte:", err);
-      alert("Error al guardar. Verifica que la tabla en Supabase sea correcta.");
+      alert("Error al guardar. Verifica tu conexión.");
       setIsSubmitting(false);
     }
   };
@@ -86,6 +89,9 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
     { label: 'Vehículo en Vía', icon: Car, color: 'bg-slate-500' },
     { label: 'Clima', icon: AlertOctagon, color: 'bg-cyan-500' },
   ];
+
+  // El botón se habilita si hay categoría O si hay evidencia (foto/comentario)
+  const canSubmit = (selectedType !== null || media.length > 0 || comment.trim().length > 0) && coords && !isSubmitting;
 
   return (
     <div className="relative p-6 bg-[#0f172a] flex flex-col max-h-[95vh] overflow-hidden select-none border border-white/5">
@@ -104,7 +110,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
       <div className="flex justify-between items-start mb-6">
         <div>
           <h2 className="text-3xl font-black text-white italic tracking-tighter leading-none mb-2">REPORTAR</h2>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Toca el incidente ocurrido</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Elige categoría o sube evidencia</p>
         </div>
         <button onClick={() => onClose(false)} className="p-3 bg-slate-800 text-slate-400 rounded-full active:scale-90 transition-transform hover:bg-slate-700">
           <X size={24} />
@@ -120,7 +126,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
             className={`flex flex-col items-center justify-center p-4 rounded-3xl border-b-[6px] transition-all active:scale-95 ${
               selectedType === cat.label 
                 ? `${cat.color} border-black/20 scale-105 shadow-2xl shadow-${cat.color.split('-')[1]}-400/40` 
-                : 'bg-slate-800/40 border-slate-900 text-slate-500'
+                : 'bg-slate-800/40 border-slate-900 text-slate-500 opacity-60'
             }`}
           >
             <cat.icon size={22} className={selectedType === cat.label ? "text-slate-900" : "text-slate-500"} />
@@ -131,21 +137,25 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         ))}
       </div>
 
-      {/* Evidencia & Comentario Side by Side */}
+      {/* Evidencia & Comentario */}
       <div className="space-y-4 mb-6">
         <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center gap-3 bg-slate-800/80 border-2 border-slate-700/50 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all hover:border-yellow-400"
+            className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all ${
+              media.some(m => m.type === 'image') ? 'bg-yellow-400/20 border-yellow-400' : 'bg-slate-800/80 border-slate-700/50 hover:border-yellow-400'
+            }`}
           >
-            <Camera size={20} className="text-yellow-400" />
+            <Camera size={20} className={media.some(m => m.type === 'image') ? 'text-yellow-400' : 'text-slate-500'} />
             Foto
           </button>
           <button 
             onClick={() => videoInputRef.current?.click()}
-            className="flex items-center justify-center gap-3 bg-slate-800/80 border-2 border-slate-700/50 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all hover:border-red-500"
+            className={`flex items-center justify-center gap-3 border-2 py-4 rounded-[28px] text-slate-300 font-black text-[11px] uppercase active:scale-95 transition-all ${
+              media.some(m => m.type === 'video') ? 'bg-red-500/20 border-red-500' : 'bg-slate-800/80 border-slate-700/50 hover:border-red-500'
+            }`}
           >
-            <Video size={20} className="text-red-500" />
+            <Video size={20} className={media.some(m => m.type === 'video') ? 'text-red-500' : 'text-slate-500'} />
             Video
           </button>
         </div>
@@ -153,38 +163,36 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
         <input type="file" ref={videoInputRef} accept="video/*" capture="environment" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
-        {(selectedType || media.length > 0) && (
-          <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50 animate-in slide-in-from-bottom-4 duration-300">
-            {media.length > 0 ? (
-              <div className="relative w-32 h-32 shrink-0">
-                <div className="w-full h-full rounded-3xl overflow-hidden border-2 border-slate-700 bg-black shadow-2xl">
-                  {media[0].type === 'image' ? (
-                    <img src={media[0].data} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-red-500/5">
-                      <Video size={32} className="text-red-500" />
-                      <span className="text-[9px] font-black text-red-500 uppercase">Video</span>
-                    </div>
-                  )}
-                </div>
-                <button onClick={removeMedia} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90">
-                  <X size={14} strokeWidth={4} />
-                </button>
+        <div className="flex gap-4 bg-slate-900/40 p-4 rounded-[40px] border border-slate-800/50">
+          {media.length > 0 ? (
+            <div className="relative w-32 h-32 shrink-0">
+              <div className="w-full h-full rounded-3xl overflow-hidden border-2 border-slate-700 bg-black shadow-2xl">
+                {media[0].type === 'image' ? (
+                  <img src={media[0].data} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-red-500/5">
+                    <Video size={32} className="text-red-500" />
+                    <span className="text-[9px] font-black text-red-500 uppercase">Video</span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="w-32 h-32 shrink-0 rounded-3xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[10px] font-black tracking-widest uppercase">
-                Evidencia
-              </div>
-            )}
-            
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="¿Qué más debemos saber? (opcional)"
-              className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-32 leading-relaxed"
-            />
-          </div>
-        )}
+              <button onClick={removeMedia} className="absolute -top-3 -right-3 bg-red-600 text-white p-2 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90">
+                <X size={14} strokeWidth={4} />
+              </button>
+            </div>
+          ) : (
+            <div className="w-32 h-32 shrink-0 rounded-3xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-700 italic text-[10px] font-black tracking-widest uppercase">
+              Evidencia
+            </div>
+          )}
+          
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Escribe un comentario..."
+            className="flex-1 bg-transparent text-white font-bold text-sm p-2 placeholder:text-slate-700 focus:outline-none resize-none h-32 leading-relaxed"
+          />
+        </div>
       </div>
 
       {/* Footer & Submit */}
@@ -192,17 +200,20 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose }) => {
         <div className="flex items-center justify-between mb-4 px-2">
           <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">
             <MapPin size={14} className={coords ? "text-emerald-500" : "text-red-500 animate-pulse"} />
-            {coords ? "Ubicación fijada" : "Esperando GPS..."}
+            {coords ? "GPS LISTO" : "Esperando GPS..."}
           </div>
+          {!selectedType && (media.length > 0 || comment.length > 0) && (
+            <span className="text-yellow-400 text-[8px] font-black uppercase tracking-tighter">Se enviará como Tráfico Lento</span>
+          )}
         </div>
 
         <button
           onClick={executeSend}
-          disabled={!selectedType || isSubmitting || !coords}
+          disabled={!canSubmit}
           className={`w-full py-8 rounded-[40px] font-black uppercase tracking-[0.3em] text-lg flex items-center justify-center gap-5 transition-all duration-300 shadow-2xl ${
-            !selectedType || isSubmitting || !coords
+            !canSubmit
               ? 'bg-slate-800 text-slate-600 grayscale'
-              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/30 active:scale-95'
+              : 'bg-yellow-400 text-slate-900 shadow-yellow-400/30 active:scale-95 animate-in fade-in'
           }`}
         >
           {isSubmitting ? (

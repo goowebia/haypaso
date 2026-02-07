@@ -18,11 +18,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
   const quickReplies = ['👍 Enterado', '⚠️ ¿Sigue el tráfico?', '✅ Camino despejado', '🚨 Precaución'];
 
   const fetchMessages = async () => {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    // CAMBIO: Ahora los mensajes también duran 24 horas para consistencia
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from('chat_mensajes')
       .select('*')
-      .gt('created_at', twoHoursAgo)
+      .gt('created_at', yesterday)
       .order('created_at', { ascending: true });
 
     if (data) setMessages(data);
@@ -63,7 +64,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
 
   return (
     <div className="flex flex-col h-full bg-slate-900/95 backdrop-blur-2xl border-l border-white/5 shadow-2xl">
-      {/* Chat Header */}
       <div className="p-4 border-b border-white/5 flex justify-between items-center bg-slate-800/50">
         <div className="flex items-center gap-2">
           <MessageCircle className="text-yellow-400" size={20} />
@@ -74,13 +74,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
         </button>
       </div>
 
-      {/* Messages Area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex justify-center p-10"><div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
         ) : messages.length === 0 ? (
           <div className="text-center py-10 opacity-30">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Sin mensajes recientes</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Sin mensajes en las últimas 24h</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -100,9 +99,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
         )}
       </div>
 
-      {/* Bottom Interface */}
       <div className="p-4 bg-slate-900 border-t border-white/5 space-y-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        {/* Quick Replies */}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {quickReplies.map((reply) => (
             <button
@@ -115,7 +112,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ onClose }) => {
           ))}
         </div>
 
-        {/* Input Field */}
         <div className="flex gap-2">
           <input
             type="text"
