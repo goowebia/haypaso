@@ -7,10 +7,22 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle } from 'lucide-react';
 
 const PENDING_REPORTS_KEY = 'hay_paso_pending_reports';
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
+
+// Función para calcular distancia en KM entre dos coordenadas (Fórmula Haversine)
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
@@ -23,7 +35,10 @@ const App: React.FC = () => {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
+  
+  // Estados de Alerta Proximidad
+  const [proximityAlert, setProximityAlert] = useState<Report | null>(null);
+  const announcedReports = useRef<Set<string>>(new Set());
 
   // Estados de Administrador
   const [isAdmin, setIsAdmin] = useState(false);
@@ -85,7 +100,44 @@ const App: React.FC = () => {
     }
   }, [soundEnabled]);
 
+  // Función de Síntesis de Voz
+  const speak = (text: string) => {
+    if (!soundEnabled) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-MX';
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+
   useEffect(() => { fetchReports(); }, [fetchReports]);
+
+  // Lógica de Alerta por Proximidad (Revisión cada 10 seg)
+  useEffect(() => {
+    const proximityCheck = setInterval(() => {
+      if (!userLocation || reports.length === 0) return;
+
+      reports.forEach(report => {
+        // No alertar sobre "Camino Libre"
+        if (report.tipo === 'Libre') return;
+
+        const distance = getDistance(userLocation[0], userLocation[1], report.latitud, report.longitud);
+        
+        // Si está a menos de 1km y NO ha sido anunciado
+        if (distance <= 1.0 && !announcedReports.current.has(report.id)) {
+          announcedReports.current.add(report.id);
+          setProximityAlert(report);
+          
+          // Alerta de voz
+          speak(`Aviso: ${report.tipo} detectado adelante`);
+          
+          // Ocultar banner tras 6 segundos
+          setTimeout(() => setProximityAlert(null), 6000);
+        }
+      });
+    }, 10000);
+
+    return () => clearInterval(proximityCheck);
+  }, [userLocation, reports, soundEnabled]);
 
   useEffect(() => {
     const channel = supabase.channel('realtime-reports')
@@ -139,7 +191,6 @@ const App: React.FC = () => {
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser]);
 
-  // Al seleccionar coordenadas en mapa siendo admin, abrimos el form
   const handleMapAdminSelect = (lat: number, lng: number) => {
     if (!isAdmin) return;
     setSelectedAdminCoords([lat, lng]);
@@ -149,6 +200,24 @@ const App: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
+
+      {/* BANNER DE ALERTA POR PROXIMIDAD */}
+      {proximityAlert && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[150] w-[95%] max-w-md animate-in slide-in-from-top duration-500">
+          <div className="bg-[#FFCC00] text-slate-900 px-6 py-5 rounded-[2rem] shadow-[0_20px_50px_rgba(255,204,0,0.3)] border-4 border-white flex items-center gap-5">
+            <div className="bg-slate-900 p-3 rounded-2xl animate-pulse">
+              <AlertTriangle size={28} className="text-[#FFCC00]" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1 opacity-70">Atención Conductor</p>
+              <h2 className="text-xl font-black uppercase italic leading-none">{proximityAlert.tipo} a 1 KM</h2>
+            </div>
+            <button onClick={() => setProximityAlert(null)} className="p-2 bg-slate-900/10 rounded-full">
+              <CloseIcon size={20} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {isAdmin && (
         <div className="fixed top-24 left-4 z-[50] pointer-events-none">
@@ -167,7 +236,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {newReportToast && !showClearSuccess && (
+      {newReportToast && !showClearSuccess && !proximityAlert && (
         <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
           <div className={`${newReportToast.tipo === 'Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
             {newReportToast.es_admin ? <ShieldAlert size={24} /> : <Plus size={24} />}
