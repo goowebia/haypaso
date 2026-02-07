@@ -8,18 +8,23 @@
     <!-- PWA Primary Meta Tags -->
     <meta name="theme-color" content="#FFCC00">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="PASO">
     
     <!-- iOS / Safari Meta Tags -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="PASO">
     
     <!-- Icono de marca: Triángulo negro sobre fondo amarillo (#FFCC00) -->
-    <link rel="apple-touch-icon" href="https://placehold.co/180x180/FFCC00/000000?text=%E2%96%B2">
-    <link rel="icon" type="image/png" href="https://placehold.co/32x32/FFCC00/000000?text=%E2%96%B2">
+    <!-- Apple Touch Icon DEBE ser PNG para compatibilidad máxima en iOS -->
+    <link rel="apple-touch-icon" href="https://placehold.co/180x180/FFCC00/000000.png?text=%E2%96%B2">
     
-    <link rel="manifest" href="/manifest.json">
+    <!-- Favicon en Data URI SVG para robustez total en navegadores modernos -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiPgogIDxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSIjRkZDQzAwIi8+CiAgPHBhdGggZD0iTTI1NiAxMDAgTDQxMiA0MDAgTDEwMCA0MDAgWiIgZmlsbD0iIzAwMDAwMCIvPgo8L3N2Zz4=">
+    
+    <!-- Se añade v=3 para forzar la recarga del manifiesto por el sistema operativo -->
+    <link rel="manifest" href="/manifest.json?v=3">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
