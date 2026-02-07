@@ -27,7 +27,6 @@ const App: React.FC = () => {
 
   // Estados de Administrador
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminCoordsSelect, setAdminCoordsSelect] = useState(false);
   const [selectedAdminCoords, setSelectedAdminCoords] = useState<[number, number] | null>(null);
   
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
@@ -39,15 +38,11 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handleAdminRequest = () => {
-    // Si ya es admin, el mismo paso (pulsación larga) lo desactiva
     if (isAdmin) {
       setIsAdmin(false);
-      setAdminCoordsSelect(false);
       setSelectedAdminCoords(null);
       return;
     }
-    
-    // Si no es admin, pide clave
     const pin = prompt("Ingrese clave de despachador:");
     if (pin === "admin123") {
       setIsAdmin(true);
@@ -116,6 +111,7 @@ const App: React.FC = () => {
 
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
+    setSelectedAdminCoords(null);
     setBgUploadStatus('uploading');
     try {
       const { error } = await supabase.from('reportes').insert([payload]);
@@ -143,18 +139,22 @@ const App: React.FC = () => {
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser]);
 
+  // Al seleccionar coordenadas en mapa siendo admin, abrimos el form
+  const handleMapAdminSelect = (lat: number, lng: number) => {
+    if (!isAdmin) return;
+    setSelectedAdminCoords([lat, lng]);
+    setShowForm(true);
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
       {isAdmin && (
-        <div className="fixed top-24 left-4 z-[50] flex flex-col gap-2">
-          <button 
-            onClick={() => setAdminCoordsSelect(!adminCoordsSelect)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-[10px] uppercase shadow-2xl border-2 transition-all active:scale-95 ${adminCoordsSelect ? 'bg-red-500 border-white text-white' : 'bg-slate-900/90 border-red-500/50 text-red-400 backdrop-blur-xl'}`}
-          >
-            <Crosshair size={18} /> {adminCoordsSelect ? 'Tocando Mapa...' : 'Clic en Mapa p/ Reporte'}
-          </button>
+        <div className="fixed top-24 left-4 z-[50] pointer-events-none">
+          <div className="bg-red-500 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-2xl border-2 border-white/20 flex items-center gap-2 animate-pulse">
+            <Crosshair size={16} /> Toca el mapa para reportar
+          </div>
         </div>
       )}
 
@@ -182,7 +182,7 @@ const App: React.FC = () => {
       <div className="absolute inset-0 z-0">
         <MapView 
           reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={{}} onMapInteraction={() => setFollowUser(false)} 
-          adminSelectionMode={adminCoordsSelect} onAdminCoordsSelect={(lat, lng) => setSelectedAdminCoords([lat, lng])} selectedAdminCoords={selectedAdminCoords}
+          adminSelectionMode={isAdmin} onAdminCoordsSelect={handleMapAdminSelect} selectedAdminCoords={selectedAdminCoords}
         />
       </div>
       
@@ -198,7 +198,7 @@ const App: React.FC = () => {
         <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} className={`p-4 rounded-full shadow-2xl active:scale-90 border-2 transition-all ${followUser ? 'bg-[#FFCC00] text-slate-900 border-[#E6B800]' : 'bg-slate-900/80 text-[#FFCC00] border-[#FFCC00]/20'}`}>
           <Navigation size={26} fill="currentColor" className="rotate-45" />
         </button>
-        <button onClick={() => setShowForm(true)} className={`p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center ${isAdmin ? 'bg-red-500 text-white' : 'bg-[#FFCC00] text-slate-900'}`}>
+        <button onClick={() => { setSelectedAdminCoords(null); setShowForm(true); }} className={`p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center ${isAdmin ? 'bg-red-500 text-white' : 'bg-[#FFCC00] text-slate-900'}`}>
           <Plus size={32} strokeWidth={4} />
         </button>
       </div>
@@ -219,7 +219,10 @@ const App: React.FC = () => {
           <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-2xl border border-white/10">
             <ReportForm 
               isAdmin={isAdmin} externalCoords={selectedAdminCoords}
-              onClose={(didSend, payload) => { if (didSend && payload) handleBackgroundUpload(payload); setShowForm(false); }} 
+              onClose={(didSend, payload) => { 
+                if (didSend && payload) handleBackgroundUpload(payload); 
+                else { setShowForm(false); setSelectedAdminCoords(null); }
+              }} 
             />
           </div>
         </div>
