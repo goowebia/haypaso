@@ -1,5 +1,4 @@
-
-const CACHE_NAME = 'hay-paso-v1';
+const CACHE_NAME = 'paso-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -31,7 +30,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first strategy for dynamic content, cache fallback for shell
+  // Estrategia Network-First para contenido dinámico
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);

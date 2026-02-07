@@ -1,7 +1,6 @@
-
 {
   "short_name": "PASO",
-  "name": "PASO - Hay Paso",
+  "name": "PASO",
   "icons": [
     {
       "src": "https://picsum.photos/192/192",
@@ -17,10 +16,10 @@
     }
   ],
   "start_url": "/",
-  "background_color": "#0f172a",
+  "background_color": "#0d1117",
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
-  "theme_color": "#facc15",
+  "theme_color": "#0d1117",
   "description": "Reporte de tráfico en tiempo real para la ruta Manzanillo-Colima-Guadalajara."
 }

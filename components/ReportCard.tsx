@@ -4,7 +4,8 @@ import { Report, ReportType } from '../types';
 import { 
   Clock, X, Maximize2, Loader2, 
   Gauge, AlertOctagon, Shield, 
-  HardHat, Car, AlertTriangle, Info 
+  HardHat, Car, AlertTriangle, Info,
+  CloudRain
 } from 'lucide-react';
 import { supabase, getUserId } from '../lib/supabase';
 
@@ -20,27 +21,29 @@ const formatTimeAgo = (dateString: string) => {
   return `${Math.floor(diff/60)}h`;
 };
 
-const getCategoryConfig = (type: ReportType) => {
+// Sincronización de iconos y colores con el mapa
+export const getCategoryConfig = (type: ReportType) => {
   switch (type) {
     case 'Accidente':
     case 'Alto Total':
-    case 'Clima':
-      return { icon: AlertOctagon, color: 'text-red-500', fill: 'none' };
+      return { icon: AlertTriangle, color: 'text-red-500', hex: '#ef4444' };
     case 'Tráfico Pesado':
-      return { icon: Gauge, color: 'text-orange-500', fill: 'none' };
+      return { icon: Car, color: 'text-orange-500', hex: '#f97316' };
     case 'Tráfico Lento':
-      return { icon: Gauge, color: 'text-yellow-400', fill: 'none' };
+      return { icon: Car, color: 'text-yellow-400', hex: '#facc15' };
     case 'Policía Visible':
     case 'Policía Escondido':
     case 'Policía Contrario':
-      return { icon: Shield, color: 'text-blue-500', fill: 'none' };
+      return { icon: Shield, color: 'text-blue-500', hex: '#3b82f6' };
     case 'Obras':
-      return { icon: HardHat, color: 'text-slate-400', fill: 'none' };
+      return { icon: HardHat, color: 'text-slate-400', hex: '#64748b' };
     case 'Vehículo en Vía':
     case 'Vehículo en Lateral':
-      return { icon: Car, color: 'text-slate-400', fill: 'none' };
+      return { icon: Car, color: 'text-slate-400', hex: '#64748b' };
+    case 'Clima':
+      return { icon: CloudRain, color: 'text-cyan-500', hex: '#06b6d4' };
     default:
-      return { icon: Info, color: 'text-slate-500', fill: 'none' };
+      return { icon: Info, color: 'text-slate-500', hex: '#64748b' };
   }
 };
 
@@ -80,6 +83,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
   const isAlert = localSigue >= 5;
   const hasImage = report.fotos && report.fotos.length > 0;
   const config = getCategoryConfig(report.tipo);
+  
+  // Si tiene muchos votos, se convierte en un triángulo de alerta importante
   const CategoryIcon = isAlert ? AlertTriangle : config.icon;
 
   return (
@@ -96,9 +101,9 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
             <div className="flex justify-between items-center mb-1.5">
               <div className="flex items-center gap-2 min-w-0">
                 <CategoryIcon 
-                  size={16} 
+                  size={20} 
                   className={isAlert ? 'text-yellow-400' : config.color} 
-                  fill={isAlert ? "currentColor" : "none"} 
+                  fill={isAlert ? "rgba(250, 204, 21, 0.2)" : "none"} 
                 />
                 <h3 className={`font-black text-[11px] uppercase tracking-wider truncate ${isAlert ? 'text-yellow-400' : 'text-slate-400'}`}>
                   {report.tipo}
@@ -110,8 +115,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, onClick }) => {
               </div>
             </div>
 
-            {/* Descripción legible: 15px-16px, Blanco Puro, Peso 500 */}
-            <p className="text-[#f8f9fa] text-[15px] font-medium leading-snug line-clamp-2 mb-3">
+            {/* Descripción legible: 16px, Blanco Puro, Peso 500 */}
+            <p className="text-[#f8f9fa] text-[16px] font-medium leading-snug line-clamp-2 mb-3">
               {report.descripcion || 'Sin detalles adicionales.'}
             </p>
 
