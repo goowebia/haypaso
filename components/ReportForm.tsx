@@ -14,6 +14,7 @@ interface ReportFormProps {
 const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoords, currentUserLocation }) => {
   const [selectedType, setSelectedType] = useState<ReportType | null>(null);
   const [showTrafficMenu, setShowTrafficMenu] = useState(false);
+  const [showPoliceMenu, setShowPoliceMenu] = useState(false);
   const [comment, setComment] = useState('');
   const [source, setSource] = useState('');
   const [media, setMedia] = useState<{ type: 'image' | 'video'; data: string; file?: File }[]>([]);
@@ -99,11 +100,10 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
     onClose(true, payload);
   };
 
-  const categories: { label: ReportType | 'Tráfico'; icon: any; color: string }[] = [
+  const categories: { label: ReportType | 'Tráfico' | 'Policía'; icon: any; color: string }[] = [
     { label: 'Camino Libre', icon: CheckCircle2, color: 'bg-emerald-500' },
     { label: 'Tráfico', icon: Gauge, color: 'bg-orange-500' },
-    { label: 'Policía Visible', icon: Shield, color: 'bg-blue-500' },
-    { label: 'Policía Escondido', icon: Shield, color: 'bg-indigo-600' },
+    { label: 'Policía', icon: Shield, color: 'bg-blue-600' },
     { label: 'Accidente', icon: AlertOctagon, color: 'bg-red-500' },
     { label: 'Obras', icon: HardHat, color: 'bg-amber-600' },
     { label: 'Vehículo en Vía', icon: Car, color: 'bg-slate-500' },
@@ -115,7 +115,14 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
     { label: 'Alto Total', icon: AlertOctagon, color: 'bg-red-700' },
   ];
 
+  const policeSubCategories: { label: ReportType; display: string; icon: any; color: string }[] = [
+    { label: 'Policía Visible', display: 'Visible', icon: Shield, color: 'bg-blue-500' },
+    { label: 'Policía Escondido', display: 'Escondido', icon: Shield, color: 'bg-indigo-600' },
+    { label: 'Policía Contrario', display: 'En otra vía', icon: Shield, color: 'bg-sky-600' },
+  ];
+
   const isTrafficSelected = selectedType && ['Tráfico Lento', 'Tráfico Pesado', 'Alto Total'].includes(selectedType);
+  const isPoliceSelected = selectedType && ['Policía Visible', 'Policía Escondido', 'Policía Contrario'].includes(selectedType);
   const canSubmit = (selectedType !== null || comment.trim().length > 0) && coords !== null && !isCompressing;
 
   const getButtonText = () => {
@@ -160,12 +167,38 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
                 <button
                   key={cat.label}
                   onClick={() => setSelectedType(selectedType === cat.label ? null : cat.label)}
-                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border-2 transition-all active:scale-95 min-h-[90px] shadow-[0_0_15px_rgba(255,255,255,0.05)] ${
-                    selectedType === cat.label ? `${cat.color} border-white text-white shadow-[0_0_20px_rgba(255,255,255,0.3)] scale-[1.05]` : 'bg-slate-800/60 border-white/20 text-white font-black'
+                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border-2 transition-all active:scale-95 min-h-[100px] shadow-[0_0_15px_rgba(255,255,255,0.05)] ${
+                    selectedType === cat.label ? `${cat.color} border-white text-white shadow-[0_0_20px_rgba(255,255,255,0.3)] scale-[1.05]` : 'bg-slate-800/60 border-white/20 text-white'
                   }`}
                 >
-                  <cat.icon size={20} />
-                  <span className="text-[8px] font-black uppercase text-center mt-2 leading-tight">{cat.label.replace('Tráfico ', '')}</span>
+                  <cat.icon size={24} />
+                  <span className="text-[14px] font-black uppercase text-center mt-2 leading-tight drop-shadow-md">{cat.label.replace('Tráfico ', '')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : showPoliceMenu ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <button 
+                onClick={() => setShowPoliceMenu(false)}
+                className="p-2 bg-slate-800 text-white rounded-xl border border-white/20 active:scale-95"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">Opciones de Policía</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {policeSubCategories.map((cat) => (
+                <button
+                  key={cat.label}
+                  onClick={() => setSelectedType(selectedType === cat.label ? null : cat.label)}
+                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border-2 transition-all active:scale-95 min-h-[100px] shadow-[0_0_15px_rgba(255,255,255,0.05)] ${
+                    selectedType === cat.label ? `${cat.color} border-white text-white shadow-[0_0_20px_rgba(255,255,255,0.3)] scale-[1.05]` : 'bg-slate-800/60 border-white/20 text-white'
+                  }`}
+                >
+                  <cat.icon size={24} />
+                  <span className="text-[14px] font-black uppercase text-center mt-2 leading-tight drop-shadow-md">{cat.display}</span>
                 </button>
               ))}
             </div>
@@ -176,20 +209,18 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
               <button
                 key={cat.label}
                 onClick={() => {
-                  if (cat.label === 'Tráfico') {
-                    setShowTrafficMenu(true);
-                  } else {
-                    setSelectedType(selectedType === cat.label ? null : cat.label);
-                  }
+                  if (cat.label === 'Tráfico') setShowTrafficMenu(true);
+                  else if (cat.label === 'Policía') setShowPoliceMenu(true);
+                  else setSelectedType(selectedType === (cat.label as ReportType) ? null : (cat.label as ReportType));
                 }}
-                className={`flex flex-col items-center justify-center p-3 rounded-3xl border-2 transition-all active:scale-95 min-h-[80px] shadow-[0_0_15px_rgba(255,255,255,0.05)] ${
-                  (selectedType === cat.label || (cat.label === 'Tráfico' && isTrafficSelected)) 
+                className={`flex flex-col items-center justify-center p-3 rounded-3xl border-2 transition-all active:scale-95 min-h-[90px] shadow-[0_0_15px_rgba(255,255,255,0.05)] ${
+                  (selectedType === cat.label || (cat.label === 'Tráfico' && isTrafficSelected) || (cat.label === 'Policía' && isPoliceSelected)) 
                   ? `${cat.color} border-white text-white shadow-[0_0_20px_rgba(255,255,255,0.3)] scale-[1.02]` 
-                  : 'bg-slate-800/40 border-white/10 text-white font-black'
+                  : 'bg-slate-800/40 border-white/10 text-white'
                 }`}
               >
-                <cat.icon size={20} />
-                <span className="text-[7px] font-black uppercase text-center mt-2 leading-tight">
+                <cat.icon size={24} />
+                <span className="text-[14px] font-black uppercase text-center mt-2 leading-tight drop-shadow-md">
                   {cat.label === 'Camino Libre' ? 'LIBRE' : cat.label}
                 </span>
               </button>
@@ -202,24 +233,24 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
         {isAdmin && (
           <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 p-3 rounded-2xl">
             <Globe size={18} className="text-red-400" />
-            <input type="text" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Fuente (Radio, Grupo, App)" className="bg-transparent text-white font-bold text-xs focus:outline-none flex-1 placeholder:text-red-900/40" />
+            <input type="text" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Fuente (Radio, Grupo, App)" className="bg-transparent text-white font-black text-xs focus:outline-none flex-1 placeholder:text-red-900/40" />
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-2 border-2 py-3 rounded-2xl font-black text-[9px] uppercase bg-slate-800/80 border-white/20 text-white active:bg-slate-700 shadow-[0_0_10px_rgba(255,255,255,0.05)]">
-            {isCompressing ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />} + Foto
+          <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-2 border-2 py-3 rounded-2xl font-black text-[12px] uppercase bg-slate-800/80 border-white/20 text-white active:bg-slate-700 shadow-[0_0_10px_rgba(255,255,255,0.05)]">
+            {isCompressing ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />} + Foto
           </button>
-          <button onClick={() => videoInputRef.current?.click()} className="flex items-center justify-center gap-2 border-2 py-3 rounded-2xl font-black text-[9px] uppercase bg-slate-800/80 border-white/20 text-white active:bg-slate-700 shadow-[0_0_10px_rgba(255,255,255,0.05)]">
-            <Video size={16} /> + Video
+          <button onClick={() => videoInputRef.current?.click()} className="flex items-center justify-center gap-2 border-2 py-3 rounded-2xl font-black text-[12px] uppercase bg-slate-800/80 border-white/20 text-white active:bg-slate-700 shadow-[0_0_10px_rgba(255,255,255,0.05)]">
+            <Video size={18} /> + Video
           </button>
         </div>
 
         <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={(e) => handleMedia(e, 'image')} />
         <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={(e) => handleMedia(e, 'video')} />
 
-        <div className="bg-slate-900/40 p-3 rounded-3xl border border-white/10 flex flex-col gap-3">
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentarios extra..." className="bg-transparent text-white font-black text-xs focus:outline-none resize-none min-h-[60px] placeholder:text-slate-700 uppercase" />
+        <div className="bg-slate-900/40 p-4 rounded-3xl border border-white/10 flex flex-col gap-3">
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comentarios extra..." className="bg-transparent text-white font-black text-sm focus:outline-none resize-none min-h-[70px] placeholder:text-slate-700 uppercase" />
           {media.length > 0 && (
             <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-white/50 shrink-0 self-start">
               <img src={media[0].data} className="w-full h-full object-cover" />
@@ -233,7 +264,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
         <button
           onClick={handleSend}
           disabled={!canSubmit}
-          className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.2em] text-lg flex items-center justify-center gap-4 shadow-2xl transition-all border-2 ${
+          className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.2em] text-xl flex items-center justify-center gap-4 shadow-2xl transition-all border-2 ${
             !canSubmit 
             ? 'bg-slate-800 text-slate-600 border-white/5 opacity-50 cursor-not-allowed' 
             : selectedType === 'Camino Libre' 
@@ -241,7 +272,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
               : 'bg-yellow-400 text-slate-900 border-white active:translate-y-1 shadow-[0_0_25px_rgba(250,204,21,0.3)]'
           }`}
         >
-          {canSubmit ? <Send size={22} strokeWidth={4} /> : (gpsError ? <AlertCircle size={22} /> : <Loader2 size={22} className="animate-spin" />)} 
+          {canSubmit ? <Send size={24} strokeWidth={4} /> : (gpsError ? <AlertCircle size={24} /> : <Loader2 size={24} className="animate-spin" />)} 
           {getButtonText()}
         </button>
       </div>
