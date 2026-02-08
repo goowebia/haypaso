@@ -4,7 +4,7 @@ import { Report, ReportType } from '../types';
 import { 
   Clock, X, Maximize2, Loader2, 
   Gauge, AlertOctagon, Shield, 
-  HardHat, Car, AlertTriangle, Info, CheckCircle2, Star
+  HardHat, Car, AlertTriangle, Info, CheckCircle2, Star, AlertCircle, Box
 } from 'lucide-react';
 import { supabase, getUserId } from '../lib/supabase';
 
@@ -32,7 +32,6 @@ const getTimeStyle = (dateString: string) => {
 
 const getCategoryConfig = (type: ReportType) => {
   switch (type) {
-    // Fixed: 'Libre' is not a valid ReportType, changed to 'Camino Libre'
     case 'Camino Libre': return { icon: CheckCircle2, color: 'text-emerald-500' };
     case 'Accidente':
     case 'Alto Total': return { icon: AlertOctagon, color: 'text-red-500' };
@@ -42,6 +41,8 @@ const getCategoryConfig = (type: ReportType) => {
     case 'Policía Escondido':
     case 'Policía Contrario': return { icon: Shield, color: 'text-blue-500' };
     case 'Obras': return { icon: HardHat, color: 'text-slate-400' };
+    case 'Bache': return { icon: AlertCircle, color: 'text-purple-500' };
+    case 'Objeto en el camino': return { icon: Box, color: 'text-stone-500' };
     default: return { icon: Info, color: 'text-slate-500' };
   }
 };
@@ -78,7 +79,6 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   };
 
   const isAlert = localSigue >= 5;
-  // Fixed: 'Libre' is not a valid ReportType, changed to 'Camino Libre'
   const isClear = report.tipo === 'Camino Libre';
   const hasImage = report.fotos && report.fotos.length > 0;
   const config = getCategoryConfig(report.tipo);

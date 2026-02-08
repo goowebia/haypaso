@@ -4,7 +4,8 @@ export type ReportType =
   | 'Tráfico Lento' | 'Tráfico Pesado' | 'Alto Total' 
   | 'Accidente' | 'Obras' 
   | 'Policía Visible' | 'Policía Escondido' | 'Policía Contrario'
-  | 'Vehículo en Vía' | 'Vehículo en Lateral' | 'Clima';
+  | 'Vehículo en Vía' | 'Vehículo en Lateral' | 'Clima'
+  | 'Bache' | 'Objeto en el camino';
 
 export type ReportStatus = 'activo' | 'despejado';
 export type VoteType = 'sigue' | 'despejado';

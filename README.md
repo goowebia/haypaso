@@ -14,7 +14,7 @@ ALTER TABLE reportes ADD COLUMN IF NOT EXISTS fuente TEXT;
 -- 2. LIMPIAR RESTRICCIONES ANTIGUAS
 ALTER TABLE reportes DROP CONSTRAINT IF EXISTS reportes_tipo_check;
 
--- 3. ACTUALIZAR CATEGORÍAS PERMITIDAS
+-- 3. ACTUALIZAR CATEGORÍAS PERMITIDAS (INCLUYE BACHE Y OBJETO)
 ALTER TABLE reportes ADD CONSTRAINT reportes_tipo_check CHECK (tipo IN (
     'Camino Libre',
     'Tráfico Lento', 
@@ -27,7 +27,9 @@ ALTER TABLE reportes ADD CONSTRAINT reportes_tipo_check CHECK (tipo IN (
     'Policía Contrario',
     'Vehículo en Vía', 
     'Vehículo en Lateral', 
-    'Clima'
+    'Clima',
+    'Bache',
+    'Objeto en el camino'
 ));
 
 -- 4. ASEGURAR QUE LOS REPORTES VIEJOS TENGAN ESTATUS

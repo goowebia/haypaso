@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2, Globe, MapPin, AlertCircle, RefreshCw, ChevronLeft } from 'lucide-react';
+import { X, Shield, Car, AlertOctagon, HardHat, Gauge, Send, Camera, Video, Loader2, CheckCircle2, Globe, MapPin, AlertCircle, RefreshCw, ChevronLeft, AlertTriangle, Box } from 'lucide-react';
 import { ReportType } from '../types';
 import imageCompression from 'browser-image-compression';
 
@@ -107,6 +107,8 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
     { label: 'Accidente', icon: AlertOctagon, color: 'bg-red-500' },
     { label: 'Obras', icon: HardHat, color: 'bg-amber-600' },
     { label: 'Vehículo en Vía', icon: Car, color: 'bg-slate-500' },
+    { label: 'Bache', icon: AlertCircle, color: 'bg-purple-600' },
+    { label: 'Objeto en el camino', icon: Box, color: 'bg-stone-600' },
   ];
 
   const trafficSubCategories: { label: ReportType; icon: any; color: string }[] = [
@@ -221,7 +223,7 @@ const ReportForm: React.FC<ReportFormProps> = ({ onClose, isAdmin, externalCoord
               >
                 <cat.icon size={24} />
                 <span className="text-[14px] font-black uppercase text-center mt-2 leading-tight drop-shadow-md">
-                  {cat.label === 'Camino Libre' ? 'LIBRE' : cat.label}
+                  {cat.label === 'Camino Libre' ? 'LIBRE' : cat.label === 'Objeto en el camino' ? 'OBJETO' : cat.label}
                 </span>
               </button>
             ))}
