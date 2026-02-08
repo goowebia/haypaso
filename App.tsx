@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal } from 'lucide-react';
 
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -24,17 +24,6 @@ const DURATION_MAP: Record<string, number> = {
   'Default': 30
 };
 
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +37,7 @@ const App: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(false);
   
   const [proximityAlert, setProximityAlert] = useState<Report | null>(null);
+  const [errorToast, setErrorToast] = useState<{ message: string, code?: string } | null>(null);
   const announcedReports = useRef<Set<string>>(new Set());
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -125,6 +115,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setUserLocation(coords);
+        setMapCenter(coords);
+      }, null, { enableHighAccuracy: false });
+
       watchId.current = navigator.geolocation.watchPosition((pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         setUserLocation(coords);
@@ -137,8 +133,8 @@ const App: React.FC = () => {
   const handleBackgroundUpload = async (payload: any) => {
     setShowForm(false);
     setSelectedAdminCoords(null);
+    setErrorToast(null);
     
-    // Inserción optimista inmediata
     const tempId = crypto.randomUUID();
     const tempReport = { ...payload, id: tempId, created_at: new Date().toISOString(), votos_sigue: 0, votos_despejado: 0, last_interaction: Date.now() };
     setReports(prev => [tempReport, ...prev]);
@@ -147,22 +143,44 @@ const App: React.FC = () => {
       const { error } = await supabase.from('reportes').insert([payload]);
       if (error) {
         setReports(prev => prev.filter(r => r.id !== tempId));
-        console.error("Supabase Error:", error);
-        alert(`NO SE PUDO ENVIAR: ${error.message}\n\nNota: Asegúrate de haber actualizado el SQL en Supabase con las nuevas columnas.`);
+        console.error("Error Supabase:", error);
+        setErrorToast({ message: error.message, code: error.code });
+        setTimeout(() => setErrorToast(null), 15000);
       } else {
         if (payload.tipo === 'Camino Libre') setShowClearSuccess(true);
         setTimeout(() => setShowClearSuccess(false), 3000);
         fetchReports(true);
       }
     } catch (err) { 
-      console.error("Fallo crítico:", err);
-      alert("Error de conexión al servidor.");
+      setReports(prev => prev.filter(r => r.id !== tempId));
+      setErrorToast({ message: "Error de conexión." });
     }
   };
 
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
+
+      {errorToast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[95%] max-w-sm animate-in zoom-in slide-in-from-top-4">
+          <div className="bg-red-600 text-white p-6 rounded-[2.5rem] shadow-[0_20px_60px_rgba(220,38,38,0.6)] border-2 border-white/30">
+            <div className="flex items-center gap-3 mb-2">
+              <Terminal size={24} className="animate-pulse" />
+              <p className="text-sm font-black uppercase italic tracking-tighter">ERROR EN SUPABASE</p>
+            </div>
+            <p className="text-[11px] font-bold leading-tight opacity-95 mb-4">
+              {errorToast.code === '42601' ? (
+                <>ERROR DE COPIADO: Copiaste las instrucciones con "#". Borra todo en el SQL Editor y pega SOLO las líneas que empiezan con "ALTER TABLE".</>
+              ) : errorToast.code === '23514' || errorToast.message.includes('check constraint') ? (
+                <>TABLA ANTIGUA: Tu base de datos no acepta los nuevos reportes. Ejecuta el script del README sin copiar los títulos.</>
+              ) : (
+                <>{errorToast.message} (Cod: {errorToast.code})</>
+              )}
+            </p>
+            <button onClick={() => setErrorToast(null)} className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-white/10 transition-colors">CERRAR AVISO</button>
+          </div>
+        </div>
+      )}
 
       {proximityAlert && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[150] w-[95%] max-w-md">
@@ -194,9 +212,9 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {newReportToast && !showClearSuccess && (
+      {newReportToast && !showClearSuccess && !errorToast && (
         <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
-          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4`}>
+          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500 shadow-[0_10px_30px_rgba(16,185,129,0.4)]' : 'bg-[#FFCC00] shadow-[0_10px_30px_rgba(250,204,21,0.4)]'} text-slate-900 px-6 py-4 rounded-3xl border-2 border-white/20 flex items-center gap-4`}>
             {newReportToast.es_admin ? <ShieldAlert size={24} /> : <Plus size={24} />}
             <div className="flex-1">
               <p className="text-[10px] font-black uppercase leading-none mb-1">{newReportToast.es_admin ? 'OFICIAL' : 'NUEVO'}</p>
@@ -248,7 +266,9 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-[#0f172a] w-full max-w-md rounded-[50px] overflow-hidden shadow-2xl border border-white/10">
             <ReportForm 
-              isAdmin={isAdmin} externalCoords={selectedAdminCoords}
+              isAdmin={isAdmin} 
+              externalCoords={selectedAdminCoords}
+              currentUserLocation={userLocation}
               onClose={(didSend, payload) => { 
                 if (didSend && payload) handleBackgroundUpload(payload); 
                 else { setShowForm(false); setSelectedAdminCoords(null); }
