@@ -99,23 +99,20 @@ const App: React.FC = () => {
       }
     } catch (err: any) { 
       console.error("Fetch Error:", err);
-      if (!isSilent) setErrorToast({ message: "Error de conexión", code: err.code });
+      if (!isSilent) setErrorToast({ message: "Error al actualizar", code: err.code });
     } finally { setLoading(false); }
   }, [processReports]);
 
-  // SUSCRIPCIÓN EN TIEMPO REAL REFORZADA
+  // TIEMPO REAL REFORZADO
   useEffect(() => {
-    const channel = supabase.channel('realtime-master')
+    const channel = supabase.channel('realtime-reports')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'reportes' 
       }, (payload) => {
-        console.log("Evento en vivo recibido:", payload.eventType);
-        
         if (payload.eventType === 'INSERT') {
           const newR = payload.new as Report;
-          // Si el reporte viene de otro usuario, mostrar notificación y sonido
           if (newR.fuente !== getUserId()) {
             setNewReportToast(newR);
             setNewlyAddedId(newR.id);
@@ -123,49 +120,22 @@ const App: React.FC = () => {
               audioRef.current.currentTime = 0; 
               audioRef.current.play().catch(() => {}); 
             }
-            setTimeout(() => setNewReportToast(null), 5000);
+            setTimeout(() => setNewReportToast(null), 6000);
           }
         }
-        // Actualizar la lista automáticamente sin importar quién envió
         fetchReports(true);
       })
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
         table: 'validaciones' 
-      }, () => {
-        fetchReports(true);
-      })
-      .subscribe((status) => {
-        console.log("Estado de conexión en tiempo real:", status);
-      });
+      }, () => fetchReports(true))
+      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [fetchReports, soundEnabled]);
 
-  // PRESENCIA (OTROS USUARIOS)
-  useEffect(() => {
-    const channel = supabase.channel('presence-users', {
-      config: { presence: { key: getUserId() } }
-    });
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState();
-      const users: Record<string, { lat: number, lng: number }> = {};
-      Object.keys(state).forEach((key) => {
-        const userState = state[key][0] as any;
-        if (userState.lat && userState.lng && key !== getUserId()) {
-          users[key] = { lat: userState.lat, lng: userState.lng };
-        }
-      });
-      setOnlineUsers(users);
-    }).subscribe();
-    presenceChannel.current = channel;
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  // GEOLOCALIZACIÓN
+  // GPS Y PRESENCIA
   useEffect(() => {
     fetchReports();
     if ("geolocation" in navigator) {
@@ -186,8 +156,8 @@ const App: React.FC = () => {
     setSelectedAdminCoords(null);
     setErrorToast(null);
     
-    // Aseguramos que el reporte lleve nuestro ID
-    const finalPayload = { ...payload, fuente: getUserId() };
+    // Si no hay fuente (usuario común), usamos su ID
+    const finalPayload = { ...payload, fuente: payload.fuente || getUserId() };
 
     try {
       const { data, error } = await supabase
@@ -196,18 +166,15 @@ const App: React.FC = () => {
         .select();
 
       if (error) {
-        console.error("Error al guardar:", error);
-        setErrorToast({ message: `No se guardó: ${error.message}` });
+        setErrorToast({ message: "Error al guardar: " + error.message });
       } else {
-        console.log("Guardado exitoso");
-        // ACTIVAR MENSAJE DE ÉXITO
+        // MOSTRAR CONFIRMACIÓN DE ÉXITO
         setShowSuccessToast(true);
         setTimeout(() => setShowSuccessToast(false), 3000);
-        // Actualizar localmente de inmediato
         fetchReports(true);
       }
     } catch (err) { 
-      setErrorToast({ message: "Error de red" });
+      setErrorToast({ message: "Error de red al reportar" });
     }
   };
 
@@ -215,17 +182,16 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
-      {/* MENSAJE DE ÉXITO (EL QUE HABÍAS PERDIDO) */}
+      {/* ANUNCIO DE ÉXITO RE-ACTIVADO */}
       {showSuccessToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in zoom-in w-[90%] max-w-sm">
-          <div className="bg-emerald-500 text-white px-6 py-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(16,185,129,0.4)] border-4 border-white/30 flex items-center gap-4 justify-center">
-            <CheckCircle2 size={32} className="animate-bounce" />
-            <p className="text-lg font-black uppercase italic tracking-tighter leading-none">Reporte Enviado</p>
+          <div className="bg-emerald-500 text-white px-6 py-6 rounded-[3rem] shadow-[0_25px_60px_rgba(16,185,129,0.5)] border-4 border-white/40 flex items-center gap-4 justify-center">
+            <CheckCircle2 size={40} className="animate-bounce" />
+            <p className="text-xl font-black uppercase italic tracking-tighter leading-none">Reporte Enviado Correctamente</p>
           </div>
         </div>
       )}
 
-      {/* ERROR TOAST */}
       {errorToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[90%] max-w-sm animate-in zoom-in">
           <div className="bg-red-600 text-white p-6 rounded-[2.5rem] shadow-2xl border-4 border-white/20 text-center">
@@ -236,13 +202,12 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* NOTIFICACIÓN DE OTRO USUARIO */}
       {newReportToast && !showSuccessToast && (
         <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
           <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-[2rem] border-2 border-white/20 flex items-center gap-4 shadow-2xl`}>
             {newReportToast.es_admin ? <ShieldAlert size={24} /> : <AlertCircle size={24} className="animate-pulse" />}
             <div className="flex-1">
-              <p className="text-[10px] font-black uppercase leading-none mb-1">NUEVO REPORTE EN VIVO</p>
+              <p className="text-[10px] font-black uppercase leading-none mb-1">NUEVA ALERTA EN RUTA</p>
               <p className="text-sm font-black uppercase italic truncate">{newReportToast.tipo}</p>
             </div>
           </div>
@@ -259,10 +224,16 @@ const App: React.FC = () => {
       </div>
       
       <div className="absolute top-0 left-0 right-0 z-50">
-        <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} isAdmin={isAdmin} onAdminRequest={() => {
-          if (isAdmin) setIsAdmin(false);
-          else { const pin = prompt("Clave:"); if (pin === "admin123") setIsAdmin(true); }
-        }} />
+        <Header 
+          onToggleChat={() => setChatOpen(!chatOpen)} 
+          soundEnabled={soundEnabled} 
+          onToggleSound={() => setSoundEnabled(!soundEnabled)} 
+          isAdmin={isAdmin} 
+          onAdminRequest={() => {
+            if (isAdmin) setIsAdmin(false);
+            else { const pin = prompt("Clave de Despachador:"); if (pin === "admin123") setIsAdmin(true); }
+          }} 
+        />
       </div>
 
       <div className={`absolute top-0 right-0 h-full w-[85%] sm:w-[350px] z-[60] transition-transform duration-500 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -283,7 +254,7 @@ const App: React.FC = () => {
           <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'BAJAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'BAJAR LISTA' : `${reports.length} ACTIVOS EN RUTA`}</p>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1">

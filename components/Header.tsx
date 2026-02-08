@@ -22,19 +22,11 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   }, []);
 
   const startPress = (e: React.PointerEvent) => {
-    // Evitar que el menú contextual interfiera
-    if (e.pointerType === 'touch') {
-      longPressTimer.current = window.setTimeout(() => {
-        onAdminRequest();
-        longPressTimer.current = null;
-      }, 3000); // 3 segundos exactos
-    } else {
-      // Para mouse también funciona
-      longPressTimer.current = window.setTimeout(() => {
-        onAdminRequest();
-        longPressTimer.current = null;
-      }, 3000);
-    }
+    // Activación por presión de 2 segundos en el logo/título
+    longPressTimer.current = window.setTimeout(() => {
+      onAdminRequest();
+      longPressTimer.current = null;
+    }, 2000);
   };
 
   const cancelPress = () => {
@@ -45,10 +37,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   };
 
   const requestPermission = async () => {
-    if (!("Notification" in window)) {
-      alert("Tu navegador no soporta notificaciones.");
-      return;
-    }
+    if (!("Notification" in window)) return;
     const permission = await Notification.requestPermission();
     setNotifStatus(permission);
   };
@@ -68,9 +57,12 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
         </div>
         <div>
           <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase italic">Hay Paso</h1>
-          <p className={`text-[9px] font-black uppercase tracking-widest leading-none mt-1 ${isAdmin ? 'text-red-400' : 'text-[#FFCC00]'}`}>
-            {isAdmin ? 'MODO DESPACHADOR' : 'EN VIVO'}
-          </p>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.8)]"></span>
+            <p className={`text-[9px] font-black uppercase tracking-widest leading-none ${isAdmin ? 'text-red-400' : 'text-[#FFCC00]'}`}>
+              {isAdmin ? 'MODO DESPACHADOR' : 'EN VIVO'}
+            </p>
+          </div>
         </div>
       </div>
 
