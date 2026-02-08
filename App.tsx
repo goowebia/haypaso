@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal, AlertOctagon } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal, AlertOctagon, Send } from 'lucide-react';
 
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -42,7 +42,7 @@ const App: React.FC = () => {
   const [selectedAdminCoords, setSelectedAdminCoords] = useState<[number, number] | null>(null);
   const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
-  const [showClearSuccess, setShowClearSuccess] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,7 +85,6 @@ const App: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        // Fallback robusto
         const { data: simpleData, error: simpleError } = await supabase
           .from('reportes')
           .select(`*`)
@@ -100,11 +99,11 @@ const App: React.FC = () => {
       }
     } catch (err: any) { 
       console.error("Fetch Error:", err);
-      // No mostrar toast en silent para no molestar
-      if (!isSilent) setErrorToast({ message: "Error al cargar datos. Verifica las tablas.", code: err.code });
+      if (!isSilent) setErrorToast({ message: "Error al cargar datos.", code: err.code });
     } finally { setLoading(false); }
   }, [processReports]);
 
+  // PRESENCIA
   useEffect(() => {
     const channel = supabase.channel('presence-users', {
       config: { presence: { key: getUserId() } }
@@ -124,24 +123,47 @@ const App: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // REALTIME MASTER
   useEffect(() => {
     const channel = supabase.channel('realtime-master')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, (payload) => {
-        console.log("Realtime Report Event:", payload.eventType);
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reportes' 
+      }, (payload) => {
+        console.log("Cambio en reportes detectado:", payload.eventType);
+        
         if (payload.eventType === 'INSERT') {
           const newR = payload.new as Report;
-          setNewReportToast(newR);
-          setNewlyAddedId(newR.id);
-          if (soundEnabled && audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(() => {}); }
-          setTimeout(() => setNewReportToast(null), 5000);
+          // Mostrar notificación si no fui yo
+          if (newR.fuente !== getUserId()) {
+            setNewReportToast(newR);
+            setNewlyAddedId(newR.id);
+            if (soundEnabled && audioRef.current) { 
+              audioRef.current.currentTime = 0; 
+              audioRef.current.play().catch(() => {}); 
+            }
+            setTimeout(() => setNewReportToast(null), 5000);
+          }
         }
+        // Forzar recarga en cualquier cambio (INSERT, UPDATE, DELETE)
         fetchReports(true);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'validaciones' }, () => fetchReports(true))
-      .subscribe();
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'validaciones' 
+      }, () => {
+        fetchReports(true);
+      })
+      .subscribe((status) => {
+        console.log("Estado suscripción Realtime:", status);
+      });
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchReports, soundEnabled]);
 
+  // GPS WATCHER
   useEffect(() => {
     fetchReports();
     if ("geolocation" in navigator) {
@@ -162,25 +184,26 @@ const App: React.FC = () => {
     setSelectedAdminCoords(null);
     setErrorToast(null);
     
-    console.log("Intentando guardar reporte:", payload.tipo);
+    // Añadimos nuestro ID de usuario al payload para evitar auto-notificarnos
+    const finalPayload = { ...payload, fuente: payload.fuente || getUserId() };
 
     try {
       const { data, error } = await supabase
         .from('reportes')
-        .insert([payload])
+        .insert([finalPayload])
         .select();
 
       if (error) {
-        console.error("Error de inserción Supabase:", error);
-        setErrorToast({ message: `Error: ${error.message} (Código: ${error.code})`, code: error.code });
+        console.error("Error al guardar:", error);
+        setErrorToast({ message: `No se guardó: ${error.message}`, code: error.code });
       } else {
-        console.log("Reporte guardado con éxito:", data[0].id);
-        if (payload.tipo === 'Camino Libre') setShowClearSuccess(true);
-        setTimeout(() => setShowClearSuccess(false), 3000);
+        console.log("Reporte guardado con éxito.");
+        // Mostrar mensaje de éxito para CUALQUIER reporte
+        setShowSuccessToast(true);
+        setTimeout(() => setShowSuccessToast(false), 3000);
         fetchReports(true);
       }
     } catch (err: any) { 
-      console.error("Error de conexión al guardar:", err);
       setErrorToast({ message: "Error de red al intentar guardar." });
     }
   };
@@ -189,35 +212,35 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
+      {/* TOAST DE ERROR */}
       {errorToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[90%] max-w-sm animate-in zoom-in">
           <div className="bg-red-600 text-white p-6 rounded-[2rem] shadow-2xl border-2 border-white/30 text-center">
             <AlertOctagon size={32} className="mx-auto mb-2 animate-bounce" />
-            <p className="text-xs font-black uppercase tracking-tighter mb-1">REPORTE NO GUARDADO</p>
+            <p className="text-xs font-black uppercase tracking-tighter mb-1">ERROR DE SISTEMA</p>
             <p className="text-[10px] font-bold opacity-90 mb-4">{errorToast.message}</p>
-            <div className="bg-black/20 p-2 rounded-lg mb-4">
-               <p className="text-[8px] font-mono opacity-80 uppercase leading-tight">Acción: Copia el SQL de README.md y ejecútalo en el SQL Editor de Supabase.</p>
-            </div>
             <button onClick={() => setErrorToast(null)} className="w-full py-2 bg-white/10 rounded-xl text-[10px] font-black uppercase border border-white/20">CERRAR</button>
           </div>
         </div>
       )}
 
-      {showClearSuccess && (
+      {/* TOAST DE ÉXITO (Restaurado) */}
+      {showSuccessToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in w-[90%] max-w-sm">
-          <div className="bg-emerald-500 text-white px-6 py-4 rounded-3xl shadow-2xl border-2 border-white/20 flex items-center gap-4">
-            <CheckCircle2 size={24} />
-            <p className="text-sm font-black uppercase italic">Reporte Enviado</p>
+          <div className="bg-emerald-500 text-white px-6 py-4 rounded-[2rem] shadow-2xl border-2 border-white/20 flex items-center gap-4 justify-center">
+            <CheckCircle2 size={24} className="animate-pulse" />
+            <p className="text-sm font-black uppercase italic tracking-tight">Reporte Enviado Correctamente</p>
           </div>
         </div>
       )}
 
-      {newReportToast && !showClearSuccess && !errorToast && (
+      {/* NOTIFICACIÓN DE NUEVO REPORTE AJENO */}
+      {newReportToast && !showSuccessToast && !errorToast && (
         <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
-          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-3xl border-2 border-white/20 flex items-center gap-4 shadow-2xl`}>
-            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <Plus size={24} />}
+          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-[2rem] border-2 border-white/20 flex items-center gap-4 shadow-2xl`}>
+            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <AlertCircle size={24} className="animate-bounce" />}
             <div className="flex-1">
-              <p className="text-[10px] font-black uppercase leading-none mb-1">{newReportToast.es_admin ? 'OFICIAL' : 'NUEVO'}</p>
+              <p className="text-[10px] font-black uppercase leading-none mb-1">{newReportToast.es_admin ? 'OFICIAL' : 'NUEVO REPORTE'}</p>
               <p className="text-sm font-black uppercase italic truncate">{newReportToast.tipo}</p>
             </div>
           </div>
@@ -234,7 +257,6 @@ const App: React.FC = () => {
       </div>
       
       <div className="absolute top-0 left-0 right-0 z-50">
-        {/* Fix: use setSoundEnabled instead of setToggleSound */}
         <Header onToggleChat={() => setChatOpen(!chatOpen)} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(!soundEnabled)} isAdmin={isAdmin} onAdminRequest={() => {
           if (isAdmin) setIsAdmin(false);
           else { const pin = prompt("Clave:"); if (pin === "admin123") setIsAdmin(true); }
