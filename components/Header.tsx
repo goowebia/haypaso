@@ -21,15 +21,26 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
     }
   }, []);
 
-  const handleTouchStart = () => {
-    longPressTimer.current = window.setTimeout(() => {
-      onAdminRequest();
-    }, 2000); // 2 segundos de presión para activar/desactivar admin
+  const startPress = (e: React.PointerEvent) => {
+    // Evitar que el menú contextual interfiera
+    if (e.pointerType === 'touch') {
+      longPressTimer.current = window.setTimeout(() => {
+        onAdminRequest();
+        longPressTimer.current = null;
+      }, 3000); // 3 segundos exactos
+    } else {
+      // Para mouse también funciona
+      longPressTimer.current = window.setTimeout(() => {
+        onAdminRequest();
+        longPressTimer.current = null;
+      }, 3000);
+    }
   };
 
-  const handleTouchEnd = () => {
+  const cancelPress = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
     }
   };
 
@@ -45,12 +56,12 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   return (
     <header className="bg-slate-900/80 backdrop-blur-md border-b border-white/5 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-4 flex items-center justify-between shadow-sm z-40">
       <div 
-        className="flex items-center gap-3 cursor-pointer select-none active:opacity-70 transition-opacity"
-        onMouseDown={handleTouchStart}
-        onMouseUp={handleTouchEnd}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onContextMenu={(e) => e.preventDefault()} // CRÍTICO: Evita el menú de iOS/Android al dejar presionado
+        className="flex items-center gap-3 cursor-pointer select-none active:opacity-70 transition-opacity touch-none"
+        onPointerDown={startPress}
+        onPointerUp={cancelPress}
+        onPointerLeave={cancelPress}
+        onPointerMove={cancelPress}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <div className={`p-2 rounded-xl flex items-center justify-center shadow-lg transition-colors ${isAdmin ? 'bg-red-500 shadow-red-500/20' : 'bg-[#FFCC00] shadow-[#FFCC00]/20'}`}>
           {isAdmin ? <ShieldAlert size={20} className="text-white" /> : <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />}
