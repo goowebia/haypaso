@@ -18,6 +18,7 @@ interface MapViewProps {
 }
 
 const formatTimeAgo = (dateString: string) => {
+  if (!dateString) return 'Desconocido';
   const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
   if (diff < 1) return 'Justo ahora';
   if (diff < 60) return `Hace ${diff} min`;
@@ -105,9 +106,10 @@ const markerStyles = `
   }
 `;
 
-const getCategoryIconPath = (type: ReportType) => {
+const getCategoryIconPath = (type: string) => {
   switch (type) {
-    case 'Libre': return '<path d="M20 6L9 17L4 12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+    // Fixed: 'Libre' removed as it's not a valid ReportType
+    case 'Camino Libre': return '<path d="M20 6L9 17L4 12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
     case 'Accidente': 
     case 'Alto Total': return '<path d="M12 9V14M12 17V17.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
     case 'Policía Visible':
@@ -120,26 +122,25 @@ const getCategoryIconPath = (type: ReportType) => {
   }
 };
 
-const getReportIcon = (type: ReportType, votosSigue: number = 0, isNew: boolean = false, isAdmin: boolean = false, zoom: number) => {
-  // Escalado basado en Zoom
-  // Base 30px en zoom 14-15
+const getReportIcon = (type: string, votosSigue: number = 0, isNew: boolean = false, isAdmin: boolean = false, zoom: number) => {
   let baseSize = 30;
   if (zoom >= 17) baseSize = 40;
   else if (zoom >= 16) baseSize = 35;
   else if (zoom <= 12) baseSize = 22;
   else if (zoom <= 10) baseSize = 16;
 
-  let color = '#facc15'; // Default Yellow
+  let color = '#facc15';
   if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
   if (type === 'Tráfico Pesado') color = '#f97316'; 
-  if (type === 'Libre') color = '#10b981';
+  // Fixed: Removed 'Libre' reference
+  if (type === 'Camino Libre') color = '#10b981';
   if (['Obras', 'Vehículo en Vía', 'Vehículo en Lateral'].includes(type)) color = '#64748b'; 
   if (type.startsWith('Policía')) color = '#3b82f6'; 
 
-  const isClear = type === 'Libre';
+  // Fixed: Removed 'Libre' reference
+  const isClear = type === 'Camino Libre';
   const isAlert = votosSigue >= 5;
 
-  // Tamaño de la insignia de admin proporcional al pin
   const badgeSize = Math.max(12, baseSize * 0.4);
   const adminBadge = isAdmin ? `
     <div style="position: absolute; top: -${badgeSize/3}px; right: -${badgeSize/3}px; background: #FFD700; border: 1.5px solid white; border-radius: 50%; width: ${badgeSize}px; height: ${badgeSize}px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.4); z-index: 20;">
@@ -167,7 +168,7 @@ const getReportIcon = (type: ReportType, votosSigue: number = 0, isNew: boolean 
     className: 'custom-report-marker',
     html: iconMarkup,
     iconSize: [baseSize, baseSize],
-    iconAnchor: [baseSize / 2, baseSize], // El pico apunta exactamente abajo al centro
+    iconAnchor: [baseSize / 2, baseSize],
     popupAnchor: [0, -baseSize],
   });
 };
@@ -207,7 +208,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
         onZoomChange={setCurrentZoom}
       />
       
-      {reports.map((report) => {
+      {reports.filter(r => r.latitud && r.longitud).map((report) => {
         const reportTime = new Date(report.created_at).getTime();
         const isNew = (now - reportTime) < 60000;
 
@@ -230,7 +231,8 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
                     <Star size={7} fill="currentColor" /> REPORTE OFICIAL
                   </div>
                 )}
-                <strong className={`block uppercase text-[10px] font-black italic tracking-tighter ${report.tipo === 'Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                {/* Fixed: Removed 'Libre' reference */}
+                <strong className={`block uppercase text-[10px] font-black italic tracking-tighter ${report.tipo === 'Camino Libre' ? 'text-emerald-400' : 'text-yellow-400'}`}>
                   {report.tipo}
                 </strong>
                 {report.fuente && <div className="text-[7px] text-slate-500 font-bold uppercase mt-0.5 truncate">Fuente: {report.fuente}</div>}

@@ -1,6 +1,6 @@
 
 export type ReportType = 
-  | 'Libre'
+  | 'Camino Libre'
   | 'Tráfico Lento' | 'Tráfico Pesado' | 'Alto Total' 
   | 'Accidente' | 'Obras' 
   | 'Policía Visible' | 'Policía Escondido' | 'Policía Contrario'
@@ -22,6 +22,7 @@ export interface Report {
   votos_despejado: number;
   es_admin?: boolean;
   fuente?: string;
+  last_interaction?: number; // Timestamp para control de caducidad en cliente
 }
 
 export interface ChatMessage {

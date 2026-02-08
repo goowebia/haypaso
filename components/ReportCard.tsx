@@ -32,7 +32,8 @@ const getTimeStyle = (dateString: string) => {
 
 const getCategoryConfig = (type: ReportType) => {
   switch (type) {
-    case 'Libre': return { icon: CheckCircle2, color: 'text-emerald-500' };
+    // Fixed: 'Libre' is not a valid ReportType, changed to 'Camino Libre'
+    case 'Camino Libre': return { icon: CheckCircle2, color: 'text-emerald-500' };
     case 'Accidente':
     case 'Alto Total': return { icon: AlertOctagon, color: 'text-red-500' };
     case 'Tráfico Pesado': return { icon: Gauge, color: 'text-orange-500' };
@@ -77,7 +78,8 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isNew, onClick }) => {
   };
 
   const isAlert = localSigue >= 5;
-  const isClear = report.tipo === 'Libre';
+  // Fixed: 'Libre' is not a valid ReportType, changed to 'Camino Libre'
+  const isClear = report.tipo === 'Camino Libre';
   const hasImage = report.fotos && report.fotos.length > 0;
   const config = getCategoryConfig(report.tipo);
   const CategoryIcon = isAlert ? AlertTriangle : config.icon;
