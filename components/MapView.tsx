@@ -18,12 +18,11 @@ interface MapViewProps {
 }
 
 const formatTimeAgo = (dateString: string) => {
-  if (!dateString) return 'Dato N/A';
+  if (!dateString) return 'N/A';
   const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
-  if (diff < 1) return 'Hace un momento';
-  if (diff < 60) return `Hace ${diff} min`;
-  const hours = Math.floor(diff / 60);
-  return `Hace ${hours} h`;
+  if (diff < 1) return 'Ahora';
+  if (diff < 60) return `${diff}m`;
+  return `${Math.floor(diff / 60)}h`;
 };
 
 const MapController = ({ 
@@ -59,7 +58,8 @@ const MapController = ({
   }, [map]);
 
   useEffect(() => {
-    map.panTo(center, { animate: true, duration: 1.2 });
+    // Usar setView para asegurar que el centrado sea preciso en móviles
+    map.setView(center, map.getZoom(), { animate: true, duration: 0.8 });
   }, [center, map]);
 
   return null;
@@ -83,30 +83,30 @@ const getCategoryIconPath = (type: string) => {
 };
 
 const getReportIcon = (type: string, isAdmin: boolean = false, zoom: number) => {
-  let baseSize = 30;
-  if (zoom >= 16) baseSize = 42;
-  else if (zoom <= 12) baseSize = 24;
+  let baseSize = 34;
+  if (zoom >= 16) baseSize = 48;
+  else if (zoom <= 12) baseSize = 26;
 
-  let color = '#f97316'; // Tráfico Naranja
-  if (type === 'Camino Libre') color = '#10b981'; // Verde
-  if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; // Rojo
-  if (type.startsWith('Policía')) color = '#2563eb'; // Azul
-  if (type === 'Obras') color = '#eab308'; // Amarillo
-  if (type === 'Bache') color = '#ea580c'; // Naranja más oscuro
-  if (type === 'Objeto en el camino') color = '#57534e'; // Gris piedra
-  if (type === 'Vehículo en Vía') color = '#64748b'; // Slate
+  let color = '#f97316'; 
+  if (type === 'Camino Libre') color = '#10b981'; 
+  if (['Accidente', 'Alto Total'].includes(type)) color = '#ef4444'; 
+  if (type.startsWith('Policía')) color = '#2563eb'; 
+  if (type === 'Obras') color = '#eab308'; 
+  if (type === 'Bache') color = '#ea580c'; 
+  if (type === 'Objeto en el camino') color = '#57534e'; 
+  if (type === 'Vehículo en Vía') color = '#64748b'; 
 
   const iconMarkup = `
     <div class="relative" style="width: ${baseSize}px; height: ${baseSize}px; display: flex; align-items: center; justify-content: center;">
-      <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.5));">
+      <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.6));">
         <path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 5.02944 7.02944 1 12 1C16.9706 1 21 5.02944 21 10Z" fill="${color}" stroke="white" stroke-width="1.5"/>
         <g transform="translate(5, 4.5) scale(0.58)">
           ${getCategoryIconPath(type)}
         </g>
       </svg>
       ${isAdmin ? `
-        <div style="position: absolute; top: -4px; right: -4px; background: #FFD700; border: 1.5px solid white; border-radius: 50%; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.3); z-index: 20;">
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="#000"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+        <div style="position: absolute; top: -6px; right: -6px; background: #FFD700; border: 2px solid white; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.4); z-index: 20;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#000"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
         </div>
       ` : ''}
     </div>
@@ -142,7 +142,6 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
         onZoomChange={setCurrentZoom}
       />
       
-      {/* Marcadores de Reportes */}
       {reports.map((report) => (
         <Marker 
           key={report.id} 
@@ -162,16 +161,14 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
         </Marker>
       ))}
 
-      {/* Marcadores de Usuarios Online (Puntos Amarillos) */}
-      {/* Fix: Explicitly type the map arguments to avoid 'unknown' type inference on pos */}
       {Object.entries(onlineUsers).map(([userId, pos]: [string, { lat: number; lng: number }]) => (
         <CircleMarker 
           key={userId}
           center={[pos.lat, pos.lng]}
-          radius={5}
+          radius={6}
           pathOptions={{ 
             fillColor: '#FFCC00', 
-            fillOpacity: 0.9, 
+            fillOpacity: 1, 
             color: '#fff', 
             weight: 2,
             className: 'online-user-dot'
@@ -180,19 +177,18 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
       ))}
 
       {selectedAdminCoords && (
-        <Marker position={selectedAdminCoords} icon={L.divIcon({ html: '<div class="w-6 h-6 border-4 border-red-500 rounded-full animate-ping"></div>', iconSize: [24,24], iconAnchor: [12,12] })} />
+        <Marker position={selectedAdminCoords} icon={L.divIcon({ html: '<div class="w-8 h-8 border-4 border-red-500 rounded-full animate-ping shadow-[0_0_20px_rgba(239,68,68,0.5)]"></div>', iconSize: [32,32], iconAnchor: [16,16] })} />
       )}
 
-      {/* Marcador del Usuario Actual (Azul) */}
       {userLocation && (
         <CircleMarker 
           center={userLocation} 
-          radius={8} 
+          radius={9} 
           pathOptions={{ 
             fillColor: '#3b82f6', 
             fillOpacity: 1, 
             color: '#fff', 
-            weight: 2.5,
+            weight: 3,
             className: 'gps-marker'
           }} 
         />
