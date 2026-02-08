@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal } from 'lucide-react';
+import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal, AlertOctagon } from 'lucide-react';
 
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -87,7 +87,12 @@ const App: React.FC = () => {
 
       if (error) throw error;
       if (data) setReports(processReports(data));
-    } catch (err) { console.error("Error cargando reportes:", err); } 
+    } catch (err: any) { 
+      console.error("Error cargando reportes:", err);
+      if (err.code === 'PGRST204') {
+        setErrorToast({ message: "Falta la columna 'estatus' en tu base de datos.", code: err.code });
+      }
+    } 
     finally { setLoading(false); }
   }, [processReports]);
 
@@ -143,7 +148,6 @@ const App: React.FC = () => {
       const { error } = await supabase.from('reportes').insert([payload]);
       if (error) {
         setReports(prev => prev.filter(r => r.id !== tempId));
-        console.error("Error Supabase:", error);
         setErrorToast({ message: error.message, code: error.code });
         setTimeout(() => setErrorToast(null), 15000);
       } else {
@@ -165,14 +169,14 @@ const App: React.FC = () => {
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[95%] max-w-sm animate-in zoom-in slide-in-from-top-4">
           <div className="bg-red-600 text-white p-6 rounded-[2.5rem] shadow-[0_20px_60px_rgba(220,38,38,0.6)] border-2 border-white/30">
             <div className="flex items-center gap-3 mb-2">
-              <Terminal size={24} className="animate-pulse" />
-              <p className="text-sm font-black uppercase italic tracking-tighter">ERROR EN SUPABASE</p>
+              <AlertOctagon size={24} className="animate-pulse" />
+              <p className="text-sm font-black uppercase italic tracking-tighter">ERROR ESTRUCTURAL</p>
             </div>
             <p className="text-[11px] font-bold leading-tight opacity-95 mb-4">
-              {errorToast.code === '42601' ? (
-                <>ERROR DE COPIADO: Copiaste las instrucciones con "#". Borra todo en el SQL Editor y pega SOLO las líneas que empiezan con "ALTER TABLE".</>
-              ) : errorToast.code === '23514' || errorToast.message.includes('check constraint') ? (
-                <>TABLA ANTIGUA: Tu base de datos no acepta los nuevos reportes. Ejecuta el script del README sin copiar los títulos.</>
+              {errorToast.code === 'PGRST204' ? (
+                <>TU TABLA NO TIENE LA COLUMNA "ESTATUS". Ejecuta el script de reparación completa que está en el README de IA Studio ahora mismo.</>
+              ) : errorToast.code === '42601' ? (
+                <>ERROR DE COPIADO: Borra todo en Supabase y pega SOLO el código ALTER TABLE (sin títulos ni #).</>
               ) : (
                 <>{errorToast.message} (Cod: {errorToast.code})</>
               )}

@@ -1,20 +1,20 @@
 
-# 🛠️ REPARACIÓN DE SUPABASE (PASO A PASO)
+# 🚨 REPARACIÓN TOTAL DE BASE DE DATOS (SOLUCIÓN PGRST204)
 
-El error que viste sucede porque el Editor de SQL no entiende texto normal, solo código. Sigue estos pasos exactos:
-
-1. Ve a tu panel de **Supabase**.
-2. Entra en **SQL Editor** (icono de `>_` en la barra lateral izquierda).
-3. Haz clic en **"New Query"**.
-4. **BORRA TODO** lo que haya en el editor.
-5. Pega **SOLAMENTE** el código que está aquí abajo:
+Si ves el error de "estatus column not found", copia este código exacto, pégalo en el **SQL Editor** de Supabase y dale a **RUN**:
 
 ```sql
-ALTER TABLE reportes DROP CONSTRAINT IF EXISTS reportes_tipo_check;
-
+-- 1. AGREGAR COLUMNAS FALTANTES (ESTATUS, FOTOS, ETC)
+ALTER TABLE reportes ADD COLUMN IF NOT EXISTS estatus TEXT DEFAULT 'activo';
+ALTER TABLE reportes ADD COLUMN IF NOT EXISTS fotos TEXT[] DEFAULT '{}';
+ALTER TABLE reportes ADD COLUMN IF NOT EXISTS video_url TEXT;
 ALTER TABLE reportes ADD COLUMN IF NOT EXISTS es_admin BOOLEAN DEFAULT FALSE;
 ALTER TABLE reportes ADD COLUMN IF NOT EXISTS fuente TEXT;
 
+-- 2. LIMPIAR RESTRICCIONES ANTIGUAS
+ALTER TABLE reportes DROP CONSTRAINT IF EXISTS reportes_tipo_check;
+
+-- 3. ACTUALIZAR CATEGORÍAS PERMITIDAS
 ALTER TABLE reportes ADD CONSTRAINT reportes_tipo_check CHECK (tipo IN (
     'Camino Libre',
     'Tráfico Lento', 
@@ -30,8 +30,12 @@ ALTER TABLE reportes ADD CONSTRAINT reportes_tipo_check CHECK (tipo IN (
     'Clima'
 ));
 
+-- 4. ASEGURAR QUE LOS REPORTES VIEJOS TENGAN ESTATUS
+UPDATE reportes SET estatus = 'activo' WHERE estatus IS NULL;
+
+-- 5. RE-ACTIVAR TIEMPO REAL
 ALTER TABLE reportes REPLICA IDENTITY FULL;
 ```
 
-6. Presiona el botón verde **RUN** (abajo a la derecha).
-7. Si dice **"Success"**, ¡ya puedes volver a la app y enviar reportes!
+**¿Por qué fallaba?**
+La aplicación ahora usa la columna `estatus` para saber qué reportes ocultar cuando ya se despejó la vía. Si esa columna no existe en tu base de datos, Supabase responde con el error que viste.
