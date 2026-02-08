@@ -1,148 +1,160 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hay Paso - Reporte de Tráfico</title>
+    <title>Hay Paso - Reporte Vial</title>
     
-    <!-- PWA Primary Meta Tags -->
-    <meta name="theme-color" content="#FFCC00">
+    <!-- PWA / Mobile Meta -->
+    <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="application-name" content="PASO">
-    
-    <!-- iOS / Safari Meta Tags -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="PASO">
     
-    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iMTgwIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiNGRkNDMDAiLz4KICA8cGF0aCBkPSJNMjU2IDEwMCBMNDEyIDQwMCBMMTAwIDQwMCBaIiBmaWxsPSIjMDAwMDAwIi8+Cjwvc3ZnPg==">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiPgogIDxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSIjRkZDQzAwIi8+CiAgPHBhdGggZD0iTTI1NiAxMDAgTDQxMiA0MDAgTDEwMCA0MDAgWiIgZmlsbD0iIzAwMDAwMCIvPgo8L3N2Zz4=">
-    <link rel="manifest" href="/manifest.json?v=v4_final">
-    
+    <!-- Tailwind & Fonts -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    
-    <!-- Leaflet Routing Machine & Geocoder Styles -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap">
     
     <style>
-        html, body { 
-            height: 100%; 
-            width: 100%; 
-            margin: 0; 
-            padding: 0; 
-            background-color: #0f172a; 
+        :root {
+            --brand-yellow: #FFCC00;
+            --brand-dark: #0f172a;
+        }
+
+        html, body, #root { 
+            height: 100%; width: 100%; margin: 0; padding: 0; 
+            background-color: var(--brand-dark); 
+            font-family: 'Inter', sans-serif;
             overflow: hidden;
-            position: fixed; 
+            position: fixed;
         }
-        #root {
-            height: 100dvh;
-            width: 100%;
-            position: relative;
-        }
+
         .leaflet-container { 
             height: 100% !important; 
             width: 100% !important; 
-            background: #0f172a !important; 
-            z-index: 1;
+            background: #1e293b !important; 
         }
-        
-        .leaflet-marker-icon { border: none !important; background: none !important; }
-        
-        /* FIX: Forzar visibilidad del Buscador y Rutas */
+
+        /* --- MODERN WAZE-STYLE ROUTING CONTAINER --- */
         .leaflet-routing-container {
-            background-color: rgba(15, 23, 42, 0.98) !important;
-            color: white !important;
-            border: 2px solid #FFCC00 !important;
-            border-radius: 1.2rem !important;
-            backdrop-filter: blur(20px);
-            font-family: inherit !important;
-            width: 280px !important;
-            max-height: 250px !important;
-            overflow-y: auto !important;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8) !important;
-            margin-top: 85px !important; 
-            margin-right: 12px !important;
-            padding: 10px !important;
-            z-index: 1000 !important;
-            display: block !important;
-            visibility: visible !important;
-        }
-        
-        .leaflet-routing-geocoders input {
-            background: #1e293b !important;
-            color: #FFCC00 !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            border-radius: 10px !important;
-            padding: 10px 12px !important;
-            font-weight: 900 !important;
-            text-transform: uppercase !important;
-            font-size: 11px !important;
-            letter-spacing: 0.05em;
-            margin-bottom: 5px !important;
-            width: 100% !important;
-        }
-
-        /* Suavizado del punto azul */
-        .smooth-marker {
-            transition: transform 0.5s ease-out !important;
-        }
-
-        .leaflet-routing-alt {
-            max-height: 120px !important;
-            font-size: 10px !important;
-            background: none !important;
+            background: white !important;
+            color: #1e293b !important;
             border: none !important;
+            border-radius: 24px !important;
+            padding: 16px !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
+            width: calc(100% - 32px) !important;
+            max-width: 400px !important;
+            margin: 0 !important;
+            position: absolute !important;
+            top: 90px !important;
+            left: 16px !important;
+            z-index: 1000 !important;
+            font-weight: 700 !important;
+            max-height: 70vh;
+            overflow-y: auto;
         }
 
-        .leaflet-routing-instruction-row {
-            border-bottom: 1px solid rgba(255,255,255,0.1) !important;
-            padding: 8px 0 !important;
+        .leaflet-routing-geocoders input {
+            background: #f1f5f9 !important;
+            color: #1e293b !important;
+            border-radius: 12px !important;
+            border: 1px solid #e2e8f0 !important;
+            padding: 10px 14px !important;
+            font-weight: 600 !important;
+            width: 100% !important;
+            margin-bottom: 8px !important;
+            font-size: 14px !important;
         }
 
+        .leaflet-routing-alt { 
+            max-height: 200px !important; 
+            overflow-y: auto !important; 
+            margin-top: 12px !important; 
+            border-top: 1px solid #f1f5f9 !important;
+            padding-top: 8px !important;
+            font-size: 13px;
+        }
+
+        .btn-iniciar-ruta {
+            background: var(--brand-yellow) !important;
+            color: var(--brand-dark) !important;
+            width: 100%;
+            padding: 14px;
+            border-radius: 16px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 12px;
+            box-shadow: 0 4px 0 #d9ae00;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-iniciar-ruta:active { transform: translateY(2px); box-shadow: 0 2px 0 #d9ae00; }
+
+        .leaflet-routing-collapse-btn { display: none !important; }
+
+        /* Custom Markers */
+        .user-marker-pulse {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            background: #3b82f6;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        .user-marker-pulse::after {
+            content: '';
+            position: absolute;
+            top: -10px; left: -10px; right: -10px; bottom: -10px;
+            border-radius: 50%;
+            background: rgba(59, 130, 246, 0.2);
+            animation: pulse-gps 2s infinite ease-in-out;
+        }
         @keyframes pulse-gps {
-          0% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.3); opacity: 0.6; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        .gps-marker-inner {
-          animation: pulse-gps 2s infinite ease-in-out;
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(2.5); opacity: 0; }
         }
 
-        body { overscroll-behavior-y: none; }
+        .report-marker {
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+            transition: transform 0.2s;
+        }
+        .report-marker:hover { transform: scale(1.1); }
+
+        /* Hide Scrollbar */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
-    
-    <script>
-      window.process = { env: { NODE_ENV: 'production' } };
-      window.global = window;
-    </script>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-
-    <script type="importmap">
-    {
-      "imports": {
-        "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react": "https://esm.sh/react@^19.2.4",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "leaflet": "data:application/javascript,export default window.L;",
-        "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3",
-        "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
-        "browser-image-compression": "https://esm.sh/browser-image-compression@^2.0.2",
-        "vite": "https://esm.sh/vite@^7.3.1"
-      }
-    }
-    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
+    "browser-image-compression": "https://esm.sh/browser-image-compression@^2.0.2",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "leaflet-routing-machine": "https://esm.sh/leaflet-routing-machine@^3.2.12",
+    "leaflet-control-geocoder": "https://esm.sh/leaflet-control-geocoder@^3.3.1"
+  }
+}
+</script>
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>

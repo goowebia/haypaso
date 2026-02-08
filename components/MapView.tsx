@@ -35,86 +35,80 @@ const speak = (text: string) => {
   window.speechSynthesis.speak(utterance);
 };
 
-// COMPONENTE DE NAVEGACIÓN Y BUSCADOR
-const RoutingEngine = ({ userLocation, reports }: { userLocation: [number, number] | null, reports: Report[] }) => {
+// COMPONENTE DE NAVEGACIÓN Y BUSCADOR (INYECCIÓN FORZADA)
+const RoutingEngine = ({ userLocation }: { userLocation: [number, number] | null }) => {
   const map = useMap();
   const routingControlRef = useRef<any>(null);
-  const lastInstructionRef = useRef<string | null>(null);
-  const warnedReportsRef = useRef<Set<string>>(new Set());
-  const currentRouteRef = useRef<any>(null);
 
   useEffect(() => {
     if (!map) return;
     const Leaflet = (window as any).L || L;
-    if (!Leaflet || !Leaflet.Routing) return;
-
-    try {
-      const control = Leaflet.Routing.control({
-        position: 'topright',
-        waypoints: [],
-        router: Leaflet.Routing.osrmv1({
-          serviceUrl: 'https://router.project-osrm.org/route/v1'
-        }),
-        lineOptions: {
-          styles: [{ color: '#3b82f6', weight: 7, opacity: 0.9 }]
-        },
-        // @ts-ignore
-        geocoder: Leaflet.Control.Geocoder.nominatim(),
-        addWaypoints: true,
-        routeWhileDragging: false,
-        fitSelectedRoutes: true,
-        showAlternatives: false,
-        collapsible: false,
-        language: 'es',
-        createMarker: () => null
-      }).addTo(map);
-
-      routingControlRef.current = control;
-
-      control.on('routesfound', (e: any) => {
-        currentRouteRef.current = e.routes[0];
-        speak("Ruta calculada. Siga las instrucciones de voz.");
-      });
-      
-      if (userLocation) {
-        control.setWaypoints([Leaflet.latLng(userLocation[0], userLocation[1])]);
-      }
-    } catch (e) {
-      console.warn("Error en buscador:", e);
+    
+    if (!Leaflet.Routing) {
+      console.error("Leaflet Routing Machine no detectada");
+      return;
     }
 
-    return () => {
-      if (routingControlRef.current && map) {
-        try { map.removeControl(routingControlRef.current); } catch (e) {}
+    // INYECCIÓN DIRECTA DEL BUSCADOR
+    const control = Leaflet.Routing.control({
+      waypoints: userLocation ? [Leaflet.latLng(userLocation[0], userLocation[1])] : [null],
+      router: Leaflet.Routing.osrmv1({
+        serviceUrl: 'https://router.project-osrm.org/route/v1'
+      }),
+      lineOptions: {
+        styles: [{ color: '#3b82f6', weight: 8, opacity: 0.8 }]
+      },
+      // Geocodificador forzado para que aparezca la barra de búsqueda
+      // @ts-ignore
+      geocoder: Leaflet.Control.Geocoder.nominatim(),
+      addWaypoints: true,
+      routeWhileDragging: true,
+      fitSelectedRoutes: true,
+      showAlternatives: false,
+      collapsible: false, // Forzar que no se oculte
+      language: 'es',
+      placeholder: '¿A dónde vas en Manzanillo?',
+      createMarker: (i: number, wp: any) => {
+        if (i === 0) return null; // El punto GPS lo manejamos nosotros
+        return Leaflet.marker(wp.latLng, {
+          icon: Leaflet.divIcon({
+            className: 'dest-marker',
+            html: `<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid white; box-shadow: 0 0 15px red;"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+          })
+        });
       }
+    }).addTo(map);
+
+    routingControlRef.current = control;
+
+    control.on('routesfound', (e: any) => {
+      const { totalDistance, totalTime } = e.routes[0].summary;
+      const km = (totalDistance / 1000).toFixed(1);
+      const min = Math.round(totalTime / 60);
+      speak(`Ruta trazada. Distancia: ${km} kilómetros. Tiempo aproximado: ${min} minutos.`);
+    });
+
+    return () => {
+      if (routingControlRef.current) map.removeControl(routingControlRef.current);
     };
   }, [map]);
 
+  // Actualización automática del punto de inicio (A) con el GPS real
   useEffect(() => {
-    if (!userLocation || !routingControlRef.current || !currentRouteRef.current) return;
-
-    const route = currentRouteRef.current;
-    const Leaflet = (window as any).L || L;
-    const userLatLng = Leaflet.latLng(userLocation[0], userLocation[1]);
-
-    for (let instr of route.instructions) {
-      const instrLatLng = route.coordinates[instr.index];
-      const dist = userLatLng.distanceTo(instrLatLng);
-      if (dist < 150 && lastInstructionRef.current !== instr.text) {
-        speak(`En ${Math.round(dist)} metros, ${instr.text}`);
-        lastInstructionRef.current = instr.text;
-        break;
+    if (userLocation && routingControlRef.current) {
+      const Leaflet = (window as any).L || L;
+      const currentWaypoints = routingControlRef.current.getWaypoints();
+      
+      // Si ya hay un destino, actualizamos el origen dinámicamente
+      if (currentWaypoints.length >= 2 && currentWaypoints[1].latLng) {
+         routingControlRef.current.spliceWaypoints(0, 1, Leaflet.latLng(userLocation[0], userLocation[1]));
+      } else if (currentWaypoints.length < 2) {
+         routingControlRef.current.setWaypoints([Leaflet.latLng(userLocation[0], userLocation[1])]);
       }
     }
-
-    reports.forEach(r => {
-      const dist = userLatLng.distanceTo(Leaflet.latLng(r.latitud, r.longitud));
-      if (dist < 1000 && r.tipo !== 'Camino Libre' && !warnedReportsRef.current.has(r.id)) {
-        speak(`⚠️ Precaución: Reporte de ${r.tipo} a un kilómetro.`);
-        warnedReportsRef.current.add(r.id);
-      }
-    });
-  }, [userLocation, reports]);
+  }, [userLocation]);
 
   return null;
 };
@@ -163,7 +157,6 @@ const getReportIcon = (type: string, isAdmin: boolean = false) => {
   });
 };
 
-// Icono personalizado suave para el GPS
 const getUserIcon = () => {
   const markup = `
     <div class="relative flex items-center justify-center" style="width: 30px; height: 30px;">
@@ -204,7 +197,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
     <MapContainer center={center} zoom={zoom} zoomControl={false} style={{ height: '100%', width: '100%' }}>
       <TileLayer url="https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}" />
       <MapController center={center} zoom={zoom} onInteraction={onMapInteraction} />
-      <RoutingEngine userLocation={userLocation} reports={reports} />
+      <RoutingEngine userLocation={userLocation} />
       
       {reports.map((r) => (
         <Marker key={r.id} position={[r.latitud, r.longitud]} icon={getReportIcon(r.tipo, r.es_admin)}>
@@ -225,13 +218,11 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
 
       {userLocation && (
         <>
-          {/* Círculo de Precisión Tenue */}
           <Circle 
             center={userLocation} 
             radius={accuracy || 20} 
             pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 1, dashArray: '5, 5' }} 
           />
-          {/* Marcador de usuario con transición suave */}
           <Marker 
             position={userLocation} 
             icon={getUserIcon()} 
