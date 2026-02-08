@@ -13,7 +13,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, onToggleSound, isAdmin, onAdminRequest }) => {
   const [notifStatus, setNotifStatus] = useState<NotificationPermission>('default');
-  const longPressTimer = useRef<number | null>(null);
+  const [isPressing, setIsPressing] = useState(false);
+  const longPressTimer = useRef<any>(null);
 
   useEffect(() => {
     if ("Notification" in window) {
@@ -22,11 +23,16 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   }, []);
 
   const startPress = (e: React.PointerEvent) => {
-    // Activación por presión de 2 segundos en el logo/título
-    longPressTimer.current = window.setTimeout(() => {
+    // Evitar que el menú contextual interfiera
+    setIsPressing(true);
+    
+    longPressTimer.current = setTimeout(() => {
       onAdminRequest();
+      setIsPressing(false);
       longPressTimer.current = null;
-    }, 2000);
+      // Vibración ligera si el dispositivo lo soporta
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 2000); // 2 segundos exactos
   };
 
   const cancelPress = () => {
@@ -34,6 +40,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    setIsPressing(false);
   };
 
   const requestPermission = async () => {
@@ -45,21 +52,26 @@ const Header: React.FC<HeaderProps> = ({ onToggleChat, hasUnread, soundEnabled, 
   return (
     <header className="bg-slate-900/80 backdrop-blur-md border-b border-white/5 px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-4 flex items-center justify-between shadow-sm z-40">
       <div 
-        className="flex items-center gap-3 cursor-pointer select-none active:opacity-70 transition-opacity touch-none"
+        className={`flex items-center gap-3 cursor-pointer select-none transition-all duration-300 touch-none ${isPressing ? 'scale-95 opacity-80' : 'active:opacity-70'}`}
         onPointerDown={startPress}
         onPointerUp={cancelPress}
         onPointerLeave={cancelPress}
-        onPointerMove={cancelPress}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <div className={`p-2 rounded-xl flex items-center justify-center shadow-lg transition-colors ${isAdmin ? 'bg-red-500 shadow-red-500/20' : 'bg-[#FFCC00] shadow-[#FFCC00]/20'}`}>
-          {isAdmin ? <ShieldAlert size={20} className="text-white" /> : <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />}
+        <div className={`p-2 rounded-xl flex items-center justify-center shadow-lg transition-all duration-500 ${
+          isAdmin ? 'bg-red-500 shadow-red-500/40 rotate-[360deg]' : 'bg-[#FFCC00] shadow-[#FFCC00]/40'
+        } ${isPressing ? 'animate-pulse scale-110' : ''}`}>
+          {isAdmin ? (
+            <ShieldAlert size={20} className="text-white" />
+          ) : (
+            <Play fill="#0f172a" size={20} className="text-slate-900 translate-x-0.5" />
+          )}
         </div>
         <div>
           <h1 className="text-lg font-black tracking-tighter leading-none text-white uppercase italic">Hay Paso</h1>
           <div className="flex items-center gap-1.5 mt-1">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.8)]"></span>
-            <p className={`text-[9px] font-black uppercase tracking-widest leading-none ${isAdmin ? 'text-red-400' : 'text-[#FFCC00]'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.8)] ${isAdmin ? 'bg-red-500' : 'bg-green-500'}`}></span>
+            <p className={`text-[9px] font-black uppercase tracking-widest leading-none transition-colors ${isAdmin ? 'text-red-400' : 'text-[#FFCC00]'}`}>
               {isAdmin ? 'MODO DESPACHADOR' : 'EN VIVO'}
             </p>
           </div>

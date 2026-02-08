@@ -178,6 +178,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAdminToggle = () => {
+    if (isAdmin) {
+      setIsAdmin(false);
+      setSelectedAdminCoords(null);
+    } else {
+      const pin = prompt("Clave de Despachador:");
+      if (pin === "admin123") {
+        setIsAdmin(true);
+      } else if (pin !== null) {
+        alert("Clave incorrecta");
+      }
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
@@ -229,10 +243,7 @@ const App: React.FC = () => {
           soundEnabled={soundEnabled} 
           onToggleSound={() => setSoundEnabled(!soundEnabled)} 
           isAdmin={isAdmin} 
-          onAdminRequest={() => {
-            if (isAdmin) setIsAdmin(false);
-            else { const pin = prompt("Clave de Despachador:"); if (pin === "admin123") setIsAdmin(true); }
-          }} 
+          onAdminRequest={handleAdminToggle} 
         />
       </div>
 
