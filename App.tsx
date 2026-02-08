@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, CheckCircle2, ShieldAlert, AlertCircle, AlertOctagon } from 'lucide-react';
+import { Plus, Navigation, CheckCircle2, Crosshair } from 'lucide-react';
 
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -24,6 +24,22 @@ const DURATION_MAP: Record<string, number> = {
   'Default': 30
 };
 
+// Función para calcular distancia en metros entre dos coordenadas
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // Radio de la Tierra en metros
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
+
 const App: React.FC = () => {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,20 +49,19 @@ const App: React.FC = () => {
   const [mapCenter, setMapCenter] = useState<[number, number]>([19.2433, -103.7247]);
   const [mapZoom, setMapZoom] = useState(14);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number>(0);
   const [followUser, setFollowUser] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
   
   const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
-  const [errorToast, setErrorToast] = useState<{ message: string, code?: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedAdminCoords, setSelectedAdminCoords] = useState<[number, number] | null>(null);
-  const [newReportToast, setNewReportToast] = useState<Report | null>(null);
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
+  const lastCenteredLocation = useRef<[number, number] | null>(null);
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const presenceChannel = useRef<any>(null);
 
   const processReports = useCallback((reportsData: any[]) => {
     const now = Date.now();
@@ -76,7 +91,6 @@ const App: React.FC = () => {
     try {
       if (!isSilent) setLoading(true);
       const limitDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      
       const { data, error } = await supabase
         .from('reportes')
         .select(`*, validaciones (voto, created_at)`)
@@ -84,99 +98,52 @@ const App: React.FC = () => {
         .gt('created_at', limitDate)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        const { data: simpleData, error: simpleError } = await supabase
-          .from('reportes')
-          .select(`*`)
-          .eq('estatus', 'activo')
-          .gt('created_at', limitDate)
-          .order('created_at', { ascending: false });
-        
-        if (simpleError) throw simpleError;
-        if (simpleData) setReports(processReports(simpleData));
-      } else if (data) {
-        setReports(processReports(data));
-      }
+      if (error) throw error;
+      if (data) setReports(processReports(data));
     } catch (err: any) { 
       console.error("Fetch Error:", err);
-      if (!isSilent) setErrorToast({ message: "Error al actualizar", code: err.code });
     } finally { setLoading(false); }
   }, [processReports]);
 
-  // TIEMPO REAL REFORZADO
-  useEffect(() => {
-    const channel = supabase.channel('realtime-reports')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'reportes' 
-      }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const newR = payload.new as Report;
-          if (newR.fuente !== getUserId()) {
-            setNewReportToast(newR);
-            setNewlyAddedId(newR.id);
-            if (soundEnabled && audioRef.current) { 
-              audioRef.current.currentTime = 0; 
-              audioRef.current.play().catch(() => {}); 
-            }
-            setTimeout(() => setNewReportToast(null), 6000);
-          }
-        }
-        fetchReports(true);
-      })
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'validaciones' 
-      }, () => fetchReports(true))
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchReports, soundEnabled]);
-
-  // GPS Y PRESENCIA
   useEffect(() => {
     fetchReports();
     if ("geolocation" in navigator) {
       const handlePos = (pos: GeolocationPosition) => {
-        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setUserLocation(coords);
-        if (presenceChannel.current) presenceChannel.current.track({ lat: coords[0], lng: coords[1] });
-        if (followUser) setMapCenter(coords);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
+        
+        setUserLocation([lat, lng]);
+        setLocationAccuracy(accuracy);
+
+        // LÓGICA DE FILTRADO: Solo centrar si followUser es true Y el movimiento es > 10 metros
+        if (followUser) {
+          if (!lastCenteredLocation.current) {
+            setMapCenter([lat, lng]);
+            lastCenteredLocation.current = [lat, lng];
+          } else {
+            const distance = calculateDistance(
+              lat, lng, 
+              lastCenteredLocation.current[0], 
+              lastCenteredLocation.current[1]
+            );
+            
+            if (distance > 10) {
+              setMapCenter([lat, lng]);
+              lastCenteredLocation.current = [lat, lng];
+            }
+          }
+        }
       };
+      
       navigator.geolocation.getCurrentPosition(handlePos, null, { enableHighAccuracy: true });
-      watchId.current = navigator.geolocation.watchPosition(handlePos, null, { enableHighAccuracy: true });
+      watchId.current = navigator.geolocation.watchPosition(handlePos, (err) => console.warn(err), { 
+        enableHighAccuracy: true,
+        maximumAge: 500 
+      });
     }
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser, fetchReports]);
-
-  const handleBackgroundUpload = async (payload: any) => {
-    setShowForm(false);
-    setSelectedAdminCoords(null);
-    setErrorToast(null);
-    
-    // Si no hay fuente (usuario común), usamos su ID
-    const finalPayload = { ...payload, fuente: payload.fuente || getUserId() };
-
-    try {
-      const { data, error } = await supabase
-        .from('reportes')
-        .insert([finalPayload])
-        .select();
-
-      if (error) {
-        setErrorToast({ message: "Error al guardar: " + error.message });
-      } else {
-        // MOSTRAR CONFIRMACIÓN DE ÉXITO
-        setShowSuccessToast(true);
-        setTimeout(() => setShowSuccessToast(false), 3000);
-        fetchReports(true);
-      }
-    } catch (err) { 
-      setErrorToast({ message: "Error de red al reportar" });
-    }
-  };
 
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -184,11 +151,17 @@ const App: React.FC = () => {
       setSelectedAdminCoords(null);
     } else {
       const pin = prompt("Clave de Despachador:");
-      if (pin === "admin123") {
-        setIsAdmin(true);
-      } else if (pin !== null) {
-        alert("Clave incorrecta");
-      }
+      if (pin === "admin123") setIsAdmin(true);
+      else if (pin !== null) alert("Clave incorrecta");
+    }
+  };
+
+  const centerOnUser = () => {
+    if (userLocation) {
+      setFollowUser(true);
+      setMapCenter([...userLocation]);
+      setMapZoom(16);
+      lastCenteredLocation.current = [...userLocation];
     }
   };
 
@@ -196,42 +169,22 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
-      {/* ANUNCIO DE ÉXITO RE-ACTIVADO */}
       {showSuccessToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in zoom-in w-[90%] max-w-sm">
-          <div className="bg-emerald-500 text-white px-6 py-6 rounded-[3rem] shadow-[0_25px_60px_rgba(16,185,129,0.5)] border-4 border-white/40 flex items-center gap-4 justify-center">
-            <CheckCircle2 size={40} className="animate-bounce" />
-            <p className="text-xl font-black uppercase italic tracking-tighter leading-none">Reporte Enviado Correctamente</p>
-          </div>
-        </div>
-      )}
-
-      {errorToast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[90%] max-w-sm animate-in zoom-in">
-          <div className="bg-red-600 text-white p-6 rounded-[2.5rem] shadow-2xl border-4 border-white/20 text-center">
-            <AlertOctagon size={32} className="mx-auto mb-2" />
-            <p className="text-sm font-black uppercase mb-4">{errorToast.message}</p>
-            <button onClick={() => setErrorToast(null)} className="w-full py-2 bg-white/10 rounded-xl text-[10px] font-black uppercase">CERRAR</button>
-          </div>
-        </div>
-      )}
-
-      {newReportToast && !showSuccessToast && (
-        <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
-          <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-[2rem] border-2 border-white/20 flex items-center gap-4 shadow-2xl`}>
-            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <AlertCircle size={24} className="animate-pulse" />}
-            <div className="flex-1">
-              <p className="text-[10px] font-black uppercase leading-none mb-1">NUEVA ALERTA EN RUTA</p>
-              <p className="text-sm font-black uppercase italic truncate">{newReportToast.tipo}</p>
-            </div>
+          <div className="bg-emerald-500 text-white px-6 py-6 rounded-[3rem] shadow-2xl border-4 border-white/40 flex items-center gap-4 justify-center text-center">
+            <CheckCircle2 size={32} />
+            <p className="text-lg font-black uppercase italic tracking-tighter">Reporte Enviado</p>
           </div>
         </div>
       )}
 
       <div className="absolute inset-0 z-0">
         <MapView 
-          reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={onlineUsers} 
-          onMapInteraction={() => setFollowUser(false)} adminSelectionMode={isAdmin} 
+          reports={reports} center={mapCenter} zoom={mapZoom} 
+          userLocation={userLocation} accuracy={locationAccuracy}
+          onlineUsers={onlineUsers} 
+          onMapInteraction={() => setFollowUser(false)} 
+          adminSelectionMode={isAdmin} 
           onAdminCoordsSelect={(lat, lng) => { if (isAdmin) { setSelectedAdminCoords([lat, lng]); setShowForm(true); } }} 
           selectedAdminCoords={selectedAdminCoords}
         />
@@ -252,10 +205,22 @@ const App: React.FC = () => {
       </div>
 
       <div className="absolute right-6 bottom-[14vh] z-40 flex flex-col gap-4">
-        <button onClick={() => { if (userLocation) { setFollowUser(true); setMapCenter(userLocation); setMapZoom(15); } }} className={`p-4 rounded-full shadow-2xl active:scale-90 border-2 transition-all ${followUser ? 'bg-[#FFCC00] text-slate-900 border-white' : 'bg-slate-900/90 text-[#FFCC00] border-[#FFCC00]/40'}`}>
-          <Navigation size={26} fill="currentColor" className="rotate-45" />
+        <button 
+          onClick={centerOnUser} 
+          className={`p-4 rounded-full shadow-2xl active:scale-90 border-2 transition-all duration-300 ${
+            followUser 
+            ? 'bg-[#FFCC00] text-slate-900 border-white shadow-[#FFCC00]/40' 
+            : 'bg-slate-900/95 text-[#FFCC00] border-[#FFCC00]/40'
+          }`}
+        >
+          {followUser ? <Navigation size={26} fill="currentColor" className="rotate-45" /> : <Crosshair size={26} />}
         </button>
-        <button onClick={() => { setSelectedAdminCoords(null); setShowForm(true); }} className={`p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center ${isAdmin ? 'bg-red-500 text-white' : 'bg-[#FFCC00] text-slate-900'}`}>
+        <button 
+          onClick={() => { setSelectedAdminCoords(null); setShowForm(true); }} 
+          className={`p-5 rounded-full shadow-2xl active:scale-90 transition-all border-4 border-slate-900 flex items-center justify-center ${
+            isAdmin ? 'bg-red-500 text-white shadow-red-500/40' : 'bg-[#FFCC00] text-slate-900 shadow-[#FFCC00]/40'
+          }`}
+        >
           <Plus size={32} strokeWidth={4} />
         </button>
       </div>
@@ -282,8 +247,13 @@ const App: React.FC = () => {
               externalCoords={selectedAdminCoords}
               currentUserLocation={userLocation}
               onClose={(didSend, payload) => { 
-                if (didSend && payload) handleBackgroundUpload(payload); 
-                else { setShowForm(false); setSelectedAdminCoords(null); }
+                if (didSend && payload) {
+                   supabase.from('reportes').insert([payload]).then(() => fetchReports(true));
+                   setShowSuccessToast(true);
+                   setTimeout(() => setShowSuccessToast(false), 3000);
+                }
+                setShowForm(false); 
+                setSelectedAdminCoords(null); 
               }} 
             />
           </div>
