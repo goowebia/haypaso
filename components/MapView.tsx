@@ -121,7 +121,7 @@ const getReportIcon = (type: string, isAdmin: boolean = false, zoom: number) => 
   });
 };
 
-const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onMapInteraction, adminSelectionMode, onAdminCoordsSelect, selectedAdminCoords }) => {
+const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, onlineUsers, onMapInteraction, adminSelectionMode, onAdminCoordsSelect, selectedAdminCoords }) => {
   const [trafficKey, setTrafficKey] = useState(Date.now());
   const [currentZoom, setCurrentZoom] = useState(zoom);
 
@@ -131,7 +131,7 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
   }, []);
 
   return (
-    <MapContainer center={center} zoom={zoom} zoomControl={false} style={{ height: '100%', width: '100%' }}>
+    <MapContainer center={center} zoom={zoom} zoomControl={false} style={{ height: '100%', width: '100%', position: 'absolute' }} className="z-0">
       <TileLayer attribution='&copy; Google' url={`https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}&t=${trafficKey}`} />
       <MapController 
         center={center} 
@@ -141,6 +141,8 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
         onAdminCoordsSelect={onAdminCoordsSelect}
         onZoomChange={setCurrentZoom}
       />
+      
+      {/* Marcadores de Reportes */}
       {reports.map((report) => (
         <Marker 
           key={report.id} 
@@ -159,11 +161,41 @@ const MapView: React.FC<MapViewProps> = ({ reports, center, zoom, userLocation, 
           </Popup>
         </Marker>
       ))}
+
+      {/* Marcadores de Usuarios Online (Puntos Amarillos) */}
+      {/* Fix: Explicitly type the map arguments to avoid 'unknown' type inference on pos */}
+      {Object.entries(onlineUsers).map(([userId, pos]: [string, { lat: number; lng: number }]) => (
+        <CircleMarker 
+          key={userId}
+          center={[pos.lat, pos.lng]}
+          radius={5}
+          pathOptions={{ 
+            fillColor: '#FFCC00', 
+            fillOpacity: 0.9, 
+            color: '#fff', 
+            weight: 2,
+            className: 'online-user-dot'
+          }}
+        />
+      ))}
+
       {selectedAdminCoords && (
         <Marker position={selectedAdminCoords} icon={L.divIcon({ html: '<div class="w-6 h-6 border-4 border-red-500 rounded-full animate-ping"></div>', iconSize: [24,24], iconAnchor: [12,12] })} />
       )}
+
+      {/* Marcador del Usuario Actual (Azul) */}
       {userLocation && (
-        <CircleMarker center={userLocation} radius={8} pathOptions={{ fillColor: '#3b82f6', fillOpacity: 1, color: '#fff', weight: 2 }} />
+        <CircleMarker 
+          center={userLocation} 
+          radius={8} 
+          pathOptions={{ 
+            fillColor: '#3b82f6', 
+            fillOpacity: 1, 
+            color: '#fff', 
+            weight: 2.5,
+            className: 'gps-marker'
+          }} 
+        />
       )}
     </MapContainer>
   );

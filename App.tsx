@@ -36,6 +36,9 @@ const App: React.FC = () => {
   const [followUser, setFollowUser] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
   
+  // Estado para usuarios conectados
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, { lat: number, lng: number }>>({});
+  
   const [proximityAlert, setProximityAlert] = useState<Report | null>(null);
   const [errorToast, setErrorToast] = useState<{ message: string, code?: string } | null>(null);
   const announcedReports = useRef<Set<string>>(new Set());
@@ -49,6 +52,7 @@ const App: React.FC = () => {
 
   const watchId = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const presenceChannel = useRef<any>(null);
 
   const processReports = useCallback((reportsData: any[]) => {
     const now = Date.now();
@@ -96,6 +100,30 @@ const App: React.FC = () => {
     finally { setLoading(false); }
   }, [processReports]);
 
+  // Sincronización de presencia de usuarios
+  useEffect(() => {
+    const channel = supabase.channel('presence-users', {
+      config: { presence: { key: getUserId() } }
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const users: Record<string, { lat: number, lng: number }> = {};
+        Object.keys(state).forEach((key) => {
+          const userState = state[key][0] as any;
+          if (userState.lat && userState.lng && key !== getUserId()) {
+            users[key] = { lat: userState.lat, lng: userState.lng };
+          }
+        });
+        setOnlineUsers(users);
+      })
+      .subscribe();
+
+    presenceChannel.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   useEffect(() => {
     fetchReports();
     const interval = setInterval(() => fetchReports(true), 45000);
@@ -120,17 +148,34 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if ("geolocation" in navigator) {
+      // Intento inicial rápido
       navigator.geolocation.getCurrentPosition((pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         setUserLocation(coords);
         setMapCenter(coords);
-      }, null, { enableHighAccuracy: false });
+        if (presenceChannel.current) {
+          presenceChannel.current.track({ lat: coords[0], lng: coords[1] });
+        }
+      }, null, { enableHighAccuracy: true });
 
+      // Monitoreo continuo
       watchId.current = navigator.geolocation.watchPosition((pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         setUserLocation(coords);
-        if (followUser) setMapCenter(coords);
-      }, (err) => console.warn("GPS Error:", err), { enableHighAccuracy: true });
+        
+        // Tracking de presencia
+        if (presenceChannel.current) {
+          presenceChannel.current.track({ lat: coords[0], lng: coords[1] });
+        }
+
+        if (followUser) {
+          setMapCenter(coords);
+        }
+      }, (err) => console.warn("GPS Error:", err), { 
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000
+      });
     }
     return () => { if (watchId.current) navigator.geolocation.clearWatch(watchId.current); };
   }, [followUser]);
@@ -230,7 +275,7 @@ const App: React.FC = () => {
 
       <div className="absolute inset-0 z-0">
         <MapView 
-          reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={{}} onMapInteraction={() => setFollowUser(false)} 
+          reports={reports} center={mapCenter} zoom={mapZoom} userLocation={userLocation} onlineUsers={onlineUsers} onMapInteraction={() => setFollowUser(false)} 
           adminSelectionMode={isAdmin} onAdminCoordsSelect={(lat, lng) => { if (isAdmin) { setSelectedAdminCoords([lat, lng]); setShowForm(true); } }} selectedAdminCoords={selectedAdminCoords}
         />
       </div>
