@@ -60,9 +60,12 @@ GRANT ALL ON TABLE validaciones TO authenticated;
 GRANT ALL ON TABLE chat_mensajes TO authenticated;
 ```
 
-**¿Cómo activar Realtime manualmente?**
-1. En Supabase ve a **Database** (icono de cilindro).
-2. Selecciona **Replication**.
-3. En la tabla **supabase_realtime**, haz clic en el botón de **Edit** o el contador de tablas.
-4. Asegúrate de que los interruptores de `reportes`, `validaciones` y `chat_mensajes` estén en **ON**.
-5. Presiona **Save**.
+**⚠️ PASO CRÍTICO: ACTIVA REALTIME EN EL PANEL DE SUPABASE**
+Si no haces esto, los reportes no se actualizarán automáticamente:
+1. En tu proyecto de Supabase, ve al icono del cilindro (**Database**).
+2. En el menú lateral busca **Replication**.
+3. Busca la tabla llamada `supabase_realtime`. Haz clic en el botón de **"Edit"** (o en el número de tablas).
+4. **ACTIVA** los interruptores para: `reportes`, `validaciones` y `chat_mensajes`.
+5. Haz clic en **Save changes**.
+
+¡Listo! Ahora los reportes aparecerán al instante en todos los dispositivos.

@@ -7,7 +7,7 @@ import MapView from './components/MapView';
 import ReportList from './components/ReportList';
 import ReportForm from './components/ReportForm';
 import ChatPanel from './components/ChatPanel';
-import { Plus, Navigation, Loader2, CheckCircle2, ShieldAlert, Crosshair, X as CloseIcon, AlertTriangle, AlertCircle, Database, Terminal, AlertOctagon, Send } from 'lucide-react';
+import { Plus, Navigation, CheckCircle2, ShieldAlert, AlertCircle, AlertOctagon } from 'lucide-react';
 
 const POP_SOUND_URL = 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3';
 
@@ -99,11 +99,53 @@ const App: React.FC = () => {
       }
     } catch (err: any) { 
       console.error("Fetch Error:", err);
-      if (!isSilent) setErrorToast({ message: "Error al cargar datos.", code: err.code });
+      if (!isSilent) setErrorToast({ message: "Error de conexión", code: err.code });
     } finally { setLoading(false); }
   }, [processReports]);
 
-  // PRESENCIA
+  // SUSCRIPCIÓN EN TIEMPO REAL REFORZADA
+  useEffect(() => {
+    const channel = supabase.channel('realtime-master')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reportes' 
+      }, (payload) => {
+        console.log("Evento en vivo recibido:", payload.eventType);
+        
+        if (payload.eventType === 'INSERT') {
+          const newR = payload.new as Report;
+          // Si el reporte viene de otro usuario, mostrar notificación y sonido
+          if (newR.fuente !== getUserId()) {
+            setNewReportToast(newR);
+            setNewlyAddedId(newR.id);
+            if (soundEnabled && audioRef.current) { 
+              audioRef.current.currentTime = 0; 
+              audioRef.current.play().catch(() => {}); 
+            }
+            setTimeout(() => setNewReportToast(null), 5000);
+          }
+        }
+        // Actualizar la lista automáticamente sin importar quién envió
+        fetchReports(true);
+      })
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'validaciones' 
+      }, () => {
+        fetchReports(true);
+      })
+      .subscribe((status) => {
+        console.log("Estado de conexión en tiempo real:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchReports, soundEnabled]);
+
+  // PRESENCIA (OTROS USUARIOS)
   useEffect(() => {
     const channel = supabase.channel('presence-users', {
       config: { presence: { key: getUserId() } }
@@ -123,47 +165,7 @@ const App: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // REALTIME MASTER
-  useEffect(() => {
-    const channel = supabase.channel('realtime-master')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'reportes' 
-      }, (payload) => {
-        console.log("Cambio en reportes detectado:", payload.eventType);
-        
-        if (payload.eventType === 'INSERT') {
-          const newR = payload.new as Report;
-          // Mostrar notificación si no fui yo
-          if (newR.fuente !== getUserId()) {
-            setNewReportToast(newR);
-            setNewlyAddedId(newR.id);
-            if (soundEnabled && audioRef.current) { 
-              audioRef.current.currentTime = 0; 
-              audioRef.current.play().catch(() => {}); 
-            }
-            setTimeout(() => setNewReportToast(null), 5000);
-          }
-        }
-        // Forzar recarga en cualquier cambio (INSERT, UPDATE, DELETE)
-        fetchReports(true);
-      })
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'validaciones' 
-      }, () => {
-        fetchReports(true);
-      })
-      .subscribe((status) => {
-        console.log("Estado suscripción Realtime:", status);
-      });
-
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchReports, soundEnabled]);
-
-  // GPS WATCHER
+  // GEOLOCALIZACIÓN
   useEffect(() => {
     fetchReports();
     if ("geolocation" in navigator) {
@@ -184,8 +186,8 @@ const App: React.FC = () => {
     setSelectedAdminCoords(null);
     setErrorToast(null);
     
-    // Añadimos nuestro ID de usuario al payload para evitar auto-notificarnos
-    const finalPayload = { ...payload, fuente: payload.fuente || getUserId() };
+    // Aseguramos que el reporte lleve nuestro ID
+    const finalPayload = { ...payload, fuente: getUserId() };
 
     try {
       const { data, error } = await supabase
@@ -195,16 +197,17 @@ const App: React.FC = () => {
 
       if (error) {
         console.error("Error al guardar:", error);
-        setErrorToast({ message: `No se guardó: ${error.message}`, code: error.code });
+        setErrorToast({ message: `No se guardó: ${error.message}` });
       } else {
-        console.log("Reporte guardado con éxito.");
-        // Mostrar mensaje de éxito para CUALQUIER reporte
+        console.log("Guardado exitoso");
+        // ACTIVAR MENSAJE DE ÉXITO
         setShowSuccessToast(true);
         setTimeout(() => setShowSuccessToast(false), 3000);
+        // Actualizar localmente de inmediato
         fetchReports(true);
       }
-    } catch (err: any) { 
-      setErrorToast({ message: "Error de red al intentar guardar." });
+    } catch (err) { 
+      setErrorToast({ message: "Error de red" });
     }
   };
 
@@ -212,35 +215,34 @@ const App: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900 overflow-hidden select-none text-slate-100">
       <audio ref={audioRef} src={POP_SOUND_URL} preload="auto" />
 
-      {/* TOAST DE ERROR */}
+      {/* MENSAJE DE ÉXITO (EL QUE HABÍAS PERDIDO) */}
+      {showSuccessToast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] animate-in zoom-in w-[90%] max-w-sm">
+          <div className="bg-emerald-500 text-white px-6 py-5 rounded-[2.5rem] shadow-[0_20px_50px_rgba(16,185,129,0.4)] border-4 border-white/30 flex items-center gap-4 justify-center">
+            <CheckCircle2 size={32} className="animate-bounce" />
+            <p className="text-lg font-black uppercase italic tracking-tighter leading-none">Reporte Enviado</p>
+          </div>
+        </div>
+      )}
+
+      {/* ERROR TOAST */}
       {errorToast && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[250] w-[90%] max-w-sm animate-in zoom-in">
-          <div className="bg-red-600 text-white p-6 rounded-[2rem] shadow-2xl border-2 border-white/30 text-center">
-            <AlertOctagon size={32} className="mx-auto mb-2 animate-bounce" />
-            <p className="text-xs font-black uppercase tracking-tighter mb-1">ERROR DE SISTEMA</p>
-            <p className="text-[10px] font-bold opacity-90 mb-4">{errorToast.message}</p>
-            <button onClick={() => setErrorToast(null)} className="w-full py-2 bg-white/10 rounded-xl text-[10px] font-black uppercase border border-white/20">CERRAR</button>
+          <div className="bg-red-600 text-white p-6 rounded-[2.5rem] shadow-2xl border-4 border-white/20 text-center">
+            <AlertOctagon size={32} className="mx-auto mb-2" />
+            <p className="text-sm font-black uppercase mb-4">{errorToast.message}</p>
+            <button onClick={() => setErrorToast(null)} className="w-full py-2 bg-white/10 rounded-xl text-[10px] font-black uppercase">CERRAR</button>
           </div>
         </div>
       )}
 
-      {/* TOAST DE ÉXITO (Restaurado) */}
-      {showSuccessToast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[120] animate-in zoom-in w-[90%] max-w-sm">
-          <div className="bg-emerald-500 text-white px-6 py-4 rounded-[2rem] shadow-2xl border-2 border-white/20 flex items-center gap-4 justify-center">
-            <CheckCircle2 size={24} className="animate-pulse" />
-            <p className="text-sm font-black uppercase italic tracking-tight">Reporte Enviado Correctamente</p>
-          </div>
-        </div>
-      )}
-
-      {/* NOTIFICACIÓN DE NUEVO REPORTE AJENO */}
-      {newReportToast && !showSuccessToast && !errorToast && (
+      {/* NOTIFICACIÓN DE OTRO USUARIO */}
+      {newReportToast && !showSuccessToast && (
         <div onClick={() => { setFollowUser(false); setMapCenter([newReportToast.latitud, newReportToast.longitud]); setMapZoom(16); setNewReportToast(null); }} className="fixed top-24 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top w-[90%] max-w-sm cursor-pointer">
           <div className={`${newReportToast.tipo === 'Camino Libre' ? 'bg-emerald-500' : 'bg-[#FFCC00]'} text-slate-900 px-6 py-4 rounded-[2rem] border-2 border-white/20 flex items-center gap-4 shadow-2xl`}>
-            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <AlertCircle size={24} className="animate-bounce" />}
+            {newReportToast.es_admin ? <ShieldAlert size={24} /> : <AlertCircle size={24} className="animate-pulse" />}
             <div className="flex-1">
-              <p className="text-[10px] font-black uppercase leading-none mb-1">{newReportToast.es_admin ? 'OFICIAL' : 'NUEVO REPORTE'}</p>
+              <p className="text-[10px] font-black uppercase leading-none mb-1">NUEVO REPORTE EN VIVO</p>
               <p className="text-sm font-black uppercase italic truncate">{newReportToast.tipo}</p>
             </div>
           </div>
@@ -279,7 +281,10 @@ const App: React.FC = () => {
       <div className={`absolute left-0 right-0 bottom-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 transition-all duration-500 ${panelOpen ? 'h-[70vh]' : 'h-24'}`}>
         <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center py-4 cursor-pointer">
           <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'BAJAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em]">{panelOpen ? 'BAJAR LISTA' : `${reports.length} REPORTES ACTIVOS`}</p>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto h-full px-1">
           <ReportList reports={reports} loading={loading} highlightId={newlyAddedId} onReportClick={(lat, lng) => { setFollowUser(false); setMapCenter([lat, lng]); setMapZoom(17); if (window.innerWidth < 768) setPanelOpen(false); }} />
