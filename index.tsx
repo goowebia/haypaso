@@ -27,7 +27,6 @@ import {
   ChevronUp,
   ChevronDown,
   Info,
-  AlertCircle,
   Box,
   Image as ImageIcon
 } from 'lucide-react';
@@ -172,7 +171,7 @@ const App = () => {
   const mapRef = useRef<L.Map | null>(null);
   const routingRef = useRef<any>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
-  const markersRef = useRef<{ [key: string]: L.Marker }>({});
+  const longPressTimer = useRef<any>(null);
 
   const fetchReports = useCallback(async () => {
     const { data } = await supabase.from('reportes').select(`*, validaciones (voto)`).eq('estatus', 'activo').order('created_at', { ascending: false });
@@ -191,7 +190,6 @@ const App = () => {
       L.tileLayer('https://mt1.google.com/vt/lyrs=m@221097234,traffic&x={x}&y={y}&z={z}').addTo(map);
       mapRef.current = map;
       
-      // Inicializar Control de Ruta
       routingRef.current = (L as any).Routing.control({
         waypoints: [],
         router: (L as any).Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
@@ -204,7 +202,7 @@ const App = () => {
       map.on('dragstart', () => setFollowUser(false));
     }
     fetchReports();
-    const channel = supabase.channel('realtime-v14').on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, fetchReports).subscribe();
+    const channel = supabase.channel('realtime-v15').on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, fetchReports).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchReports]);
 
@@ -224,7 +222,6 @@ const App = () => {
           }
           if (followUser) mapRef.current.flyTo([lat, lng], 16, { animate: true });
           
-          // Actualizar waypoint de inicio si hay ruta activa
           if (routingRef.current) {
             const wps = routingRef.current.getWaypoints();
             if (wps.length >= 2 && wps[1].latLng) {
@@ -246,8 +243,32 @@ const App = () => {
         routingRef.current.setWaypoints([L.latLng(userLocation[0], userLocation[1]), L.latLng(dest.lat, dest.lng)]);
         mapRef.current?.flyTo([dest.lat, dest.lng], 15);
         setFollowUser(false);
+        setSearchText(results[0].name || searchText);
       }
     });
+  };
+
+  const handleAdminRequest = () => {
+    const p = prompt("PIN Administrador:");
+    if (p === "admin123") {
+      setIsAdmin(!isAdmin);
+    } else if (p !== null) {
+      alert("PIN incorrecto");
+    }
+  };
+
+  const startLongPress = () => {
+    longPressTimer.current = setTimeout(() => {
+      handleAdminRequest();
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 2000);
+  };
+
+  const endLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   };
 
   const handleReport = async (tipo: string) => {
@@ -278,31 +299,46 @@ const App = () => {
 
   return (
     <div className="relative w-full h-full bg-slate-900 overflow-hidden font-sans">
-      {/* BARRA DE BÚSQUEDA REAL */}
+      {/* BARRA DE BÚSQUEDA REDISEÑADA */}
       <div className="absolute top-0 left-0 right-0 p-4 z-[2000] pointer-events-none flex justify-center">
-        <div className="w-full max-w-lg bg-white shadow-3xl rounded-full p-2 flex items-center pointer-events-auto border-2 border-slate-100">
-           <div className="bg-slate-100 p-2.5 rounded-full text-slate-400 mr-3 shrink-0"><Search size={22} strokeWidth={3} /></div>
+        <div className="w-full max-w-lg bg-white shadow-3xl rounded-full p-2 flex items-center pointer-events-auto border-2 border-slate-100 h-16 sm:h-20">
+           {/* LOGO / SEARCH ICON CON LONG PRESS PARA ADMIN */}
+           <div 
+             onMouseDown={startLongPress}
+             onMouseUp={endLongPress}
+             onTouchStart={startLongPress}
+             onTouchEnd={endLongPress}
+             className="bg-slate-100 p-4 sm:p-5 rounded-full text-slate-500 mr-3 shrink-0 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-inner border border-slate-200"
+           >
+             <Search size={28} strokeWidth={4} />
+           </div>
+
            <input 
              type="text" 
              value={searchText}
              onChange={(e) => setSearchText(e.target.value)}
              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
              placeholder="¿A DÓNDE VAS?" 
-             className="w-full bg-transparent text-slate-900 font-black focus:outline-none text-sm px-1 uppercase tracking-wider"
+             className="w-full bg-transparent text-slate-900 font-black focus:outline-none text-base sm:text-lg px-2 uppercase tracking-tight placeholder:text-slate-400"
            />
-           <button onClick={() => { const p = prompt("PIN:"); if(p === "admin123") setIsAdmin(!isAdmin); }} className={`p-3 rounded-full transition-all ml-1 shrink-0 ${isAdmin ? 'bg-red-500 text-white' : 'bg-yellow-400 text-slate-900'}`}>
-             <Navigation size={22} fill="currentColor" />
+
+           {/* BOTÓN AMARILLO PARA BUSCAR RUTA */}
+           <button 
+             onClick={handleSearch} 
+             className={`p-4 sm:p-5 rounded-full transition-all ml-2 shrink-0 flex items-center justify-center shadow-lg active:scale-90 ${isAdmin ? 'bg-red-500 text-white' : 'bg-yellow-400 text-slate-900'}`}
+           >
+             <Navigation size={28} fill="currentColor" />
            </button>
         </div>
       </div>
 
       {/* FABs INTELIGENTES */}
       <div className={`absolute bottom-32 right-6 z-[6000] flex flex-col gap-5 pointer-events-none transition-all duration-500 ${panelOpen ? 'opacity-0 scale-75 translate-y-20' : 'opacity-100 scale-100 translate-y-0'}`}>
-        <button onClick={() => setFollowUser(true)} className={`p-4 rounded-full shadow-2xl transition-all active:scale-90 border-2 pointer-events-auto ${followUser ? 'bg-blue-600 border-white text-white' : 'bg-white border-slate-200 text-blue-600'}`}>
-          <Crosshair size={28} />
+        <button onClick={() => setFollowUser(true)} className={`p-5 rounded-full shadow-2xl transition-all active:scale-90 border-2 pointer-events-auto ${followUser ? 'bg-blue-600 border-white text-white' : 'bg-white border-slate-200 text-blue-600'}`}>
+          <Crosshair size={32} />
         </button>
-        <button onClick={() => { setShowForm(true); setActiveMenu('main'); }} className="p-6 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90 transition-all pointer-events-auto bg-yellow-400 shadow-yellow-400/30">
-          <Plus size={36} strokeWidth={4} className="text-slate-900" />
+        <button onClick={() => { setShowForm(true); setActiveMenu('main'); }} className="p-7 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90 transition-all pointer-events-auto bg-yellow-400 shadow-yellow-400/30">
+          <Plus size={42} strokeWidth={4} className="text-slate-900" />
         </button>
       </div>
 
@@ -313,9 +349,9 @@ const App = () => {
           <div className="flex items-center gap-3 px-8 w-full justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full animate-pulse bg-emerald-500"></span>
-              <p className="text-[11px] text-slate-200 font-black uppercase tracking-[0.3em]">{reports.length} ACTIVOS</p>
+              <p className="text-[11px] text-slate-200 font-black uppercase tracking-[0.3em]">{reports.length} ACTIVOS EN RUTA</p>
             </div>
-            {panelOpen ? <ChevronDown size={22} /> : <ChevronUp size={22} />}
+            {panelOpen ? <ChevronDown size={24} /> : <ChevronUp size={24} />}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-24 no-scrollbar scroll-smooth">
@@ -346,11 +382,11 @@ const App = () => {
               <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter leading-none mb-1">Reportar</h2>
               <div className="flex items-center justify-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
-                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">SISTEMA OK</p>
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">GPS OK</p>
               </div>
             </div>
             <div className="flex flex-col gap-3 p-5 bg-slate-800/60 rounded-[40px] border border-white/5 shadow-inner">
-               <p className="text-[11px] font-black text-yellow-400 uppercase tracking-[0.2em] text-center mb-1">SUBIR EVIDENCIA</p>
+               <p className="text-[11px] font-black text-yellow-400 uppercase tracking-[0.2em] text-center mb-1">EVIDENCIA</p>
                <div className="flex gap-3">
                  <button onClick={() => document.getElementById('f-cam')?.click()} className="flex-1 flex flex-col items-center justify-center gap-2 p-5 bg-yellow-400 rounded-3xl active:scale-95 text-slate-900 font-black"><Camera size={28} /><span>FOTO</span></button>
                  <button onClick={() => document.getElementById('f-vid')?.click()} className="flex-1 flex flex-col items-center justify-center gap-2 p-5 bg-white/10 border border-white/10 rounded-3xl active:scale-95 text-white font-black"><Video size={28} /><span>VIDEO</span></button>
@@ -388,7 +424,7 @@ const App = () => {
                 {['En la vía', 'Oculto', 'En la otra vía'].map(p => <button key={p} onClick={() => handleReport(`Policía ${p}`)} className="w-full py-5 bg-blue-600 rounded-[32px] text-white font-black uppercase text-lg">{p}</button>)}
               </div>
             )}
-            {isUploading && <div className="flex items-center justify-center gap-3 text-yellow-400 animate-pulse"><Loader2 className="animate-spin" /><span>SUBIENDO...</span></div>}
+            {isUploading && <div className="flex items-center justify-center gap-3 text-yellow-400 animate-pulse"><Loader2 className="animate-spin" /><span>SINCRO...</span></div>}
           </div>
         </div>
       )}
