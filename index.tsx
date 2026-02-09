@@ -3,31 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 import imageCompression from 'browser-image-compression';
 import { 
-  Navigation, 
-  Plus, 
-  Crosshair, 
-  Shield, 
-  AlertTriangle, 
-  CheckCircle, 
-  Gauge, 
-  X,
-  Search,
-  ThumbsUp,
-  Check,
-  Camera,
-  Video,
-  Play,
-  Loader2,
-  ChevronLeft,
-  HardHat,
-  ChevronUp,
-  ChevronDown,
-  Info,
-  Box,
-  Image as ImageIcon
+  Navigation, Plus, Crosshair, Shield, AlertTriangle, CheckCircle, Gauge, X, Search,
+  ThumbsUp, Check, Camera, Video, Play, Loader2, ChevronLeft, HardHat, Info, Box, Image as ImageIcon,
+  Star, Volume2, VolumeX, MessageCircle
 } from 'lucide-react';
 
-// Forzamos el uso de la instancia global L que tiene los plugins cargados desde index.html
+// Forzar instancia global de Leaflet con plugins
 const L = (window as any).L;
 
 // --- CONFIGURATION ---
@@ -44,109 +25,73 @@ const getUserId = () => {
   return userId;
 };
 
-// --- TYPES ---
-interface Report {
-  id: string;
-  tipo: string;
-  latitud: number;
-  longitud: number;
-  es_admin: boolean;
-  fuente?: string;
-  descripcion?: string;
-  fotos?: string[];
-  video_url?: string;
-  created_at: string;
-  votos_sigue?: number;
-  votos_despejado?: number;
-}
-
 // --- COMPONENTES ---
 
-const CompactRowReportCard: React.FC<{ 
-  report: Report, 
+const CompactRowCard: React.FC<{ 
+  report: any, 
   onClick: (lat: number, lng: number) => void,
   onVote: () => void,
   onMediaClick: (url: string, type: 'image' | 'video') => void
 }> = ({ report, onClick, onVote, onMediaClick }) => {
   const [voted, setVoted] = useState(false);
-  const [localSigue, setLocalSigue] = useState(report.votos_sigue || 0);
-  const [localDespejado, setLocalDespejado] = useState(report.votos_despejado || 0);
 
-  const formatTimeAgo = (dateString: string) => {
-    const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 60000);
-    if (diff < 1) return 'Ahora';
-    if (diff < 60) return `${diff}m`;
-    return `${Math.floor(diff / 60)}h`;
+  const formatTime = (d: string) => {
+    const diff = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
+    return diff < 1 ? 'AHORA' : `${diff}M`;
   };
 
-  const handleVote = async (e: React.MouseEvent, voto: 'sigue' | 'despejado') => {
+  const handleVote = async (e: any, v: string) => {
     e.stopPropagation();
     if (voted) return;
-    
-    if (voto === 'sigue') setLocalSigue(prev => prev + 1);
-    else setLocalDespejado(prev => prev + 1);
-
-    try {
-      await supabase.from('validaciones').insert({ reporte_id: report.id, voto, usuario_id: getUserId() });
-      setVoted(true);
-      onVote();
-    } catch (err) {
-      if (voto === 'sigue') setLocalSigue(prev => prev - 1);
-      else setLocalDespejado(prev => prev - 1);
-    }
+    setVoted(true);
+    await supabase.from('validaciones').insert({ reporte_id: report.id, voto: v, usuario_id: getUserId() });
+    onVote();
   };
 
   const getIcon = () => {
     const t = report.tipo.toLowerCase();
     if (t.includes('policía')) return <Shield size={14} />;
     if (t.includes('tráfico')) return <Gauge size={14} />;
-    if (t.includes('accidente')) return <AlertTriangle size={14} />;
-    if (t.includes('obras')) return <HardHat size={14} />;
     if (t.includes('libre')) return <CheckCircle size={14} />;
-    return <Info size={14} />;
+    return <AlertTriangle size={14} />;
   };
 
-  const hasImage = Array.isArray(report.fotos) && report.fotos.length > 0 && report.fotos[0];
-  const hasVideo = report.video_url && report.video_url.trim() !== "";
-  const cacheBust = `?t=${new Date(report.created_at).getTime()}`;
+  const hasImg = report.fotos && report.fotos.length > 0;
+  const hasVid = !!report.video_url;
 
   return (
     <div 
       onClick={() => onClick(report.latitud, report.longitud)}
-      className={`flex items-center gap-3 bg-slate-900/60 backdrop-blur-md border border-white/5 rounded-3xl p-3 mb-2 transition-all active:scale-[0.98] hover:bg-slate-800/80 ${report.es_admin ? 'border-yellow-400/40 shadow-[0_0_10px_rgba(250,204,21,0.1)]' : ''}`}
+      className={`flex items-center gap-3 p-3 bg-slate-800/40 backdrop-blur border-b border-white/5 active:bg-slate-700/60 transition-colors ${report.es_admin ? 'border-l-4 border-l-yellow-400' : ''}`}
     >
-      <div className="shrink-0">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg ${report.es_admin ? 'bg-yellow-400 text-slate-900' : 'bg-slate-800 text-slate-400 border border-white/5'}`}>
-          {getIcon()}
-        </div>
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${report.es_admin ? 'bg-yellow-400 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>
+        {getIcon()}
       </div>
+      
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h4 className={`text-[11px] font-black uppercase truncate leading-none ${report.es_admin ? 'text-yellow-400' : 'text-white'}`}>{report.tipo}</h4>
-          <span className="text-[9px] text-slate-500 font-bold uppercase shrink-0">{formatTimeAgo(report.created_at)}</span>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className={`text-[10px] font-black uppercase tracking-tighter ${report.es_admin ? 'text-yellow-400' : 'text-white'}`}>{report.tipo}</span>
+          <span className="text-[8px] font-bold text-slate-500">{formatTime(report.created_at)}</span>
         </div>
-        <p className="text-[10px] text-slate-400 font-bold uppercase truncate italic mt-1 leading-none">{report.descripcion || 'Sin descripción'}</p>
-        <div className="flex gap-2 mt-2">
-          <button onClick={(e) => handleVote(e, 'sigue')} className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase border ${voted ? 'bg-yellow-400 text-slate-900' : 'bg-slate-800/50 text-slate-400 border-white/10'}`}>
-            <ThumbsUp size={10} /> {localSigue}
-          </button>
-          <button onClick={(e) => handleVote(e, 'despejado')} className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase border ${voted ? 'bg-emerald-500 text-white' : 'bg-slate-800/50 text-slate-400 border-white/10'}`}>
-            <Check size={10} /> {localDespejado}
-          </button>
+        <p className="text-[11px] text-slate-400 truncate uppercase italic leading-none">{report.descripcion || 'Sin detalles'}</p>
+        <div className="flex gap-2 mt-1.5">
+          <button onClick={(e) => handleVote(e, 'sigue')} className="text-[8px] font-black bg-slate-700/50 px-2 py-0.5 rounded text-yellow-400 border border-yellow-400/20">SIGUE {report.votos_sigue}</button>
+          <button onClick={(e) => handleVote(e, 'despejado')} className="text-[8px] font-black bg-slate-700/50 px-2 py-0.5 rounded text-emerald-400 border border-emerald-400/20">LIBRE {report.votos_despejado}</button>
         </div>
       </div>
+
       <div className="shrink-0">
-        {hasImage ? (
-          <div onClick={(e) => { e.stopPropagation(); onMediaClick(report.fotos![0] + cacheBust, 'image'); }} className="w-14 h-14 rounded-full border-2 border-white/20 overflow-hidden shadow-xl cursor-pointer active:scale-90 transition-transform bg-slate-800">
-            <img src={report.fotos![0] + cacheBust} className="w-full h-full object-cover rounded-full" />
+        {hasImg ? (
+          <div onClick={(e) => { e.stopPropagation(); onMediaClick(report.fotos[0], 'image'); }} className="w-12 h-12 rounded-full border-2 border-white/20 overflow-hidden shadow-lg">
+            <img src={report.fotos[0]} className="w-full h-full object-cover" />
           </div>
-        ) : hasVideo ? (
-          <div onClick={(e) => { e.stopPropagation(); onMediaClick(report.video_url! + cacheBust, 'video'); }} className="w-14 h-14 rounded-full border-2 border-white/20 bg-slate-800 flex items-center justify-center shadow-xl cursor-pointer group active:scale-90 transition-transform">
-            <Play size={18} fill="white" className="text-white" />
+        ) : hasVid ? (
+          <div onClick={(e) => { e.stopPropagation(); onMediaClick(report.video_url, 'video'); }} className="w-12 h-12 rounded-full border-2 border-white/20 bg-slate-700 flex items-center justify-center shadow-lg">
+            <Play size={14} fill="white" className="text-white" />
           </div>
         ) : (
-          <div className="w-14 h-14 rounded-full border-2 border-white/5 bg-slate-800/30 flex items-center justify-center text-slate-700">
-            <ImageIcon size={18} />
+          <div className="w-12 h-12 rounded-full border-2 border-white/5 bg-slate-900 flex items-center justify-center text-slate-700">
+            <ImageIcon size={14} />
           </div>
         )}
       </div>
@@ -155,24 +100,22 @@ const CompactRowReportCard: React.FC<{
 };
 
 const App = () => {
-  const [reports, setReports] = useState<Report[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [followUser, setFollowUser] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [routeActive, setRouteActive] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<'main' | 'traffic' | 'police'>('main');
+  const [mediaOverlay, setMediaOverlay] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [tempMedia, setTempMedia] = useState<{ type: 'image' | 'video', url: string, blob: Blob | File } | null>(null);
-  const [mediaOverlay, setMediaOverlay] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
+  const [activeMenu, setActiveMenu] = useState('main');
+  const [tempMedia, setTempMedia] = useState<any>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const routingRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
-  const markersRef = useRef<{ [key: string]: any }>({});
   const longPressTimer = useRef<any>(null);
 
   const fetchReports = useCallback(async () => {
@@ -204,7 +147,7 @@ const App = () => {
       map.on('dragstart', () => setFollowUser(false));
     }
     fetchReports();
-    const channel = supabase.channel('realtime-v17').on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, fetchReports).subscribe();
+    const channel = supabase.channel('realtime-v18').on('postgres_changes', { event: '*', schema: 'public', table: 'reportes' }, fetchReports).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchReports]);
 
@@ -222,8 +165,7 @@ const App = () => {
           } else {
             userMarkerRef.current.setLatLng([lat, lng]);
           }
-          if (followUser) mapRef.current.flyTo([lat, lng], 16, { animate: true });
-          
+          if (followUser) mapRef.current.flyTo([lat, lng], 16);
           if (routingRef.current) {
             const wps = routingRef.current.getWaypoints();
             if (wps.length >= 2 && wps[1].latLng) {
@@ -236,39 +178,11 @@ const App = () => {
     }
   }, [followUser]);
 
-  useEffect(() => {
-    if (!mapRef.current) return;
-    // Limpiar marcadores antiguos
-    Object.keys(markersRef.current).forEach(id => {
-      markersRef.current[id].remove();
-      delete markersRef.current[id];
-    });
-    // Añadir nuevos
-    reports.forEach(r => {
-      const color = r.es_admin ? '#FFCC00' : (r.tipo.includes('Policía') ? '#2563eb' : '#ef4444');
-      const emoji = r.es_admin ? '⭐' : '📍';
-      const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="background:${color}; width:28px; height:28px; border-radius:50%; border:2px solid white; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">${emoji}</div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-      markersRef.current[r.id] = L.marker([r.latitud, r.longitud], { icon }).addTo(mapRef.current);
-    });
-  }, [reports]);
-
   const handleSearch = () => {
     if (!searchText.trim() || !userLocation) return;
-    
-    // Bias Manzanillo
     const geocoder = L.Control.Geocoder.nominatim({
-        geocodingQueryParams: {
-            countrycodes: 'mx',
-            viewbox: '-104.5,19.2,-104.1,18.9', 
-            bounded: 1
-        }
+        geocodingQueryParams: { countrycodes: 'mx', viewbox: '-104.5,19.2,-104.1,18.9', bounded: 1 }
     });
-
     geocoder.geocode(`${searchText}, Manzanillo, Colima`, (results: any[]) => {
       if (results && results.length > 0) {
         const dest = results[0].center;
@@ -278,34 +192,26 @@ const App = () => {
         setRouteActive(true);
         setSearchText(results[0].name || searchText);
       } else {
-        alert("Lugar no encontrado en Manzanillo, intenta ser más específico.");
+        alert("Lugar no encontrado en Manzanillo.");
       }
     });
   };
 
-  const startLongPress = (e: React.MouseEvent | React.TouchEvent) => {
+  const startLongPress = () => {
     longPressTimer.current = setTimeout(() => {
-      const p = prompt("PIN Administrador:");
+      const p = prompt("PIN:");
       if (p === "admin123") setIsAdmin(!isAdmin);
-      else if (p !== null) alert("PIN incorrecto");
-      if (navigator.vibrate) navigator.vibrate(50);
     }, 2000);
   };
 
-  const endLongPress = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
+  const endLongPress = () => clearTimeout(longPressTimer.current);
 
   const handleReport = async (tipo: string) => {
     if (!userLocation) return;
     setIsUploading(true);
     let finalMedia = null;
     if (tempMedia) {
-      const ext = tempMedia.type === 'image' ? 'jpg' : 'mp4';
-      const fileName = `${Date.now()}.${ext}`;
+      const fileName = `${Date.now()}.${tempMedia.type === 'image' ? 'jpg' : 'mp4'}`;
       const { data } = await supabase.storage.from('reportes').upload(fileName, tempMedia.blob);
       if (data) {
         const { data: { publicUrl } } = supabase.storage.from('reportes').getPublicUrl(fileName);
@@ -316,7 +222,7 @@ const App = () => {
       tipo, latitud: userLocation[0], longitud: userLocation[1], estatus: 'activo', es_admin: isAdmin,
       fotos: tempMedia?.type === 'image' && finalMedia ? [finalMedia] : [],
       video_url: tempMedia?.type === 'video' && finalMedia ? finalMedia : null,
-      descripcion: `Incidencia: ${tipo}`
+      descripcion: `Reporte: ${tipo}`
     }]);
     setIsUploading(false);
     setShowForm(false);
@@ -326,154 +232,136 @@ const App = () => {
   };
 
   return (
-    <div className="relative w-full h-full bg-slate-900 overflow-hidden font-sans">
-      {/* MAP CONTAINER */}
-      <div ref={mapContainerRef} className="absolute inset-0 z-0" />
-
-      {/* BARRA DE BÚSQUEDA */}
-      <div className="absolute top-0 left-0 right-0 p-4 z-[2000] pointer-events-none flex flex-col items-center gap-3">
-        <div className="w-full max-w-lg bg-white shadow-3xl rounded-full p-2 flex items-center pointer-events-auto border-2 border-slate-100 h-20 sm:h-24">
-           <div 
-             onMouseDown={startLongPress}
-             onMouseUp={endLongPress}
-             onTouchStart={startLongPress}
-             onTouchEnd={endLongPress}
-             className="bg-slate-100 p-6 rounded-full text-slate-500 mr-3 shrink-0 flex items-center justify-center transition-all active:scale-95 cursor-pointer shadow-inner border-2 border-slate-200"
-           >
-             <Search size={36} strokeWidth={4} />
-           </div>
-
-           <input 
-             type="text" 
-             value={searchText}
-             onChange={(e) => setSearchText(e.target.value)}
-             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-             placeholder="¿A DÓNDE VAS EN MANZANILLO?" 
-             className="w-full bg-transparent text-slate-900 font-black focus:outline-none text-lg sm:text-2xl px-2 uppercase tracking-tighter placeholder:text-slate-300"
-           />
-
-           <button 
-             onClick={handleSearch} 
-             className={`p-6 rounded-full transition-all ml-2 shrink-0 flex items-center justify-center shadow-lg active:scale-90 ${isAdmin ? 'bg-red-500 text-white' : 'bg-yellow-400 text-slate-900'}`}
-           >
-             <Navigation size={36} fill="currentColor" />
-           </button>
+    <div className="flex flex-col h-full w-full bg-slate-900 overflow-hidden">
+      
+      {/* HEADER PREMIUM CON BUSCADOR INTEGRADO */}
+      <header className="h-[80px] bg-slate-950 flex items-center px-4 gap-4 header-neon-border z-50 shrink-0">
+        <div 
+          onMouseDown={startLongPress} onMouseUp={endLongPress} 
+          onTouchStart={startLongPress} onTouchEnd={endLongPress}
+          className={`flex flex-col cursor-pointer active:scale-95 transition-transform shrink-0 ${isAdmin ? 'text-red-500' : 'text-yellow-400'}`}
+        >
+          <h1 className="text-2xl font-black italic tracking-tighter leading-none">HAY PASO</h1>
+          <span className="text-[9px] font-black tracking-[0.3em] uppercase opacity-60">MANZANILLO</span>
         </div>
 
+        <div className="flex-1 bg-white/5 border border-white/10 rounded-full h-12 flex items-center px-4 gap-3 focus-within:border-yellow-400/50 transition-all">
+          <Search size={18} className="text-slate-500" />
+          <input 
+            type="text" value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder="¿A DÓNDE VAS?" 
+            className="bg-transparent flex-1 text-white font-black text-sm uppercase focus:outline-none placeholder:text-slate-700"
+          />
+          <button onClick={handleSearch} className="bg-yellow-400 p-2 rounded-full text-slate-900 active:scale-90 transition-transform">
+            <Navigation size={18} fill="currentColor" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button className="p-2.5 bg-slate-800 rounded-full text-slate-400 active:bg-slate-700"><Volume2 size={20} /></button>
+          <button className="p-2.5 bg-slate-800 rounded-full text-slate-400 active:bg-slate-700"><MessageCircle size={20} /></button>
+        </div>
+      </header>
+
+      {/* MAPA */}
+      <div className="flex-1 relative">
+        <div ref={mapContainerRef} className="absolute inset-0 z-0" />
+        
+        {/* BOTÓN INICIAR RUTA FLOTANTE */}
         {routeActive && (
-            <button 
-                onClick={() => { setFollowUser(true); setRouteActive(false); setSearchText(''); }}
-                className="pointer-events-auto animate-in slide-in-from-top-4 bg-[#FFCC00] text-slate-900 px-10 py-5 rounded-full font-black text-xl uppercase shadow-[0_15px_40px_rgba(255,204,0,0.5)] border-4 border-white active:scale-95 transition-transform"
-            >
-                Iniciar Ruta
-            </button>
+          <div className="absolute top-4 left-0 right-0 flex justify-center z-10">
+            <button onClick={() => { setFollowUser(true); setRouteActive(false); }} className="bg-emerald-500 text-white font-black uppercase px-6 py-3 rounded-full shadow-2xl border-2 border-white animate-bounce">Iniciar Ruta</button>
+          </div>
         )}
-      </div>
 
-      {/* FABs */}
-      <div className={`absolute bottom-32 right-6 z-[6000] flex flex-col gap-5 pointer-events-none transition-all duration-500 ${panelOpen ? 'opacity-0 scale-75 translate-y-20' : 'opacity-100 scale-100 translate-y-0'}`}>
-        <button onClick={() => setFollowUser(true)} className={`p-6 rounded-full shadow-2xl transition-all active:scale-90 border-2 pointer-events-auto ${followUser ? 'bg-blue-600 border-white text-white shadow-blue-500/30' : 'bg-white border-slate-200 text-blue-600 shadow-xl'}`}>
-          <Crosshair size={36} />
-        </button>
-        <button onClick={() => { setShowForm(true); setActiveMenu('main'); }} className="p-8 rounded-full shadow-2xl border-4 border-slate-900 active:scale-90 transition-all pointer-events-auto bg-yellow-400 shadow-yellow-400/40">
-          <Plus size={48} strokeWidth={4} className="text-slate-900" />
-        </button>
-      </div>
-
-      {/* LIST PANEL */}
-      <div className={`absolute left-0 right-0 bottom-0 z-[5000] bg-slate-950/95 backdrop-blur-3xl border-t border-white/10 transition-all duration-500 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] flex flex-col ${panelOpen ? 'h-[75vh]' : 'h-24'}`}>
-        <div onClick={() => setPanelOpen(!panelOpen)} className="w-full flex flex-col items-center pt-4 pb-3 cursor-pointer shrink-0">
-          <div className="w-16 h-1.5 bg-slate-800 rounded-full mb-3" />
-          <div className="flex items-center gap-3 px-8 w-full justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full animate-pulse bg-emerald-500"></span>
-              <p className="text-[11px] text-slate-200 font-black uppercase tracking-[0.3em]">{reports.length} ACTIVOS EN RUTA</p>
-            </div>
-            {panelOpen ? <ChevronDown size={28} className="text-slate-500" /> : <ChevronUp size={28} className="text-slate-500" />}
-          </div>
+        {/* FABs */}
+        <div className="absolute bottom-6 right-6 flex flex-col gap-4 z-40">
+          <button onClick={() => setFollowUser(true)} className={`p-4 rounded-full shadow-2xl border-2 active:scale-90 transition-all ${followUser ? 'bg-blue-600 border-white text-white' : 'bg-white border-slate-200 text-blue-600'}`}>
+            <Crosshair size={28} />
+          </button>
+          <button onClick={() => { setShowForm(true); setActiveMenu('main'); }} className="p-6 rounded-full shadow-2xl bg-yellow-400 text-slate-900 border-4 border-slate-900 active:scale-90 transition-all">
+            <Plus size={36} strokeWidth={4} />
+          </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 pb-24 no-scrollbar scroll-smooth">
+      </div>
+
+      {/* PANEL DE REPORTES COMPACTO */}
+      <div className="h-[35%] bg-slate-950/95 backdrop-blur-xl border-t border-white/10 flex flex-col shrink-0 z-40">
+        <div className="p-3 border-b border-white/5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{reports.length} REPORTES EN VIVO</span>
+          </div>
+          <Star size={16} className="text-yellow-400" />
+        </div>
+        <div className="flex-1 real-scroll">
           {reports.map((r) => (
-            <CompactRowReportCard key={r.id} report={r} onVote={fetchReports} onMediaClick={(url, type) => setMediaOverlay({ url, type })} onClick={(lat, lng) => { setFollowUser(false); mapRef.current?.flyTo([lat, lng], 17); setPanelOpen(false); }} />
+            <CompactRowCard key={r.id} report={r} onVote={fetchReports} onMediaClick={(url, type) => setMediaOverlay({ url, type })} onClick={(lat, lng) => { setFollowUser(false); mapRef.current?.flyTo([lat, lng], 17); }} />
           ))}
+          <div className="h-20" /> {/* Espaciador final */}
         </div>
       </div>
 
-      {/* MEDIA OVERLAY */}
-      {mediaOverlay && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/98 flex items-center justify-center p-6 backdrop-blur-3xl" onClick={() => setMediaOverlay(null)}>
-          <button className="absolute top-10 right-10 p-5 bg-white/10 rounded-full text-white"><X size={36} /></button>
-          <div className="max-w-full max-h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            {mediaOverlay.type === 'image' ? <img src={mediaOverlay.url} className="max-w-full max-h-full rounded-3xl border border-white/10 shadow-2xl" /> : <video src={mediaOverlay.url} controls autoPlay className="max-w-full max-h-full rounded-3xl" />}
-          </div>
-        </div>
-      )}
-
-      {/* FORM MODAL */}
+      {/* MODAL REPORTE */}
       {showForm && (
-        <div className="fixed inset-0 z-[7000] bg-slate-950/95 backdrop-blur-3xl flex items-center justify-center p-4">
-          <div className="bg-slate-900 w-full max-w-sm rounded-[48px] p-8 border border-white/10 shadow-3xl relative flex flex-col gap-6 overflow-y-auto max-h-[92vh] no-scrollbar">
-            <button onClick={() => activeMenu === 'main' ? setShowForm(false) : setActiveMenu('main')} className="absolute top-10 left-10 p-3 bg-slate-800 rounded-full text-slate-300">
+        <div className="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4">
+          <div className="bg-slate-900 w-full max-w-sm rounded-[40px] p-8 border border-white/10 shadow-3xl relative flex flex-col gap-6 overflow-y-auto max-h-[90vh] no-scrollbar">
+            <button onClick={() => activeMenu === 'main' ? setShowForm(false) : setActiveMenu('main')} className="absolute top-8 left-8 p-3 bg-slate-800 rounded-full text-slate-400">
               {activeMenu === 'main' ? <X size={24} /> : <ChevronLeft size={24} />}
             </button>
             <div className="mt-4 text-center">
-              <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter leading-none mb-1">Reportar</h2>
-              <div className="flex items-center justify-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></div>
-                <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest">GPS OK</p>
-              </div>
+              <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter">REPORTAR</h2>
             </div>
-            <div className="flex flex-col gap-3 p-6 bg-slate-800/60 rounded-[40px] border border-white/5 shadow-inner">
-               <p className="text-[12px] font-black text-yellow-400 uppercase tracking-[0.2em] text-center mb-1">EVIDENCIA</p>
-               <div className="flex gap-4">
-                 <button onClick={() => document.getElementById('f-cam')?.click()} className="flex-1 flex flex-col items-center justify-center gap-2 p-6 bg-yellow-400 rounded-3xl active:scale-95 text-slate-900 font-black shadow-lg"><Camera size={32} /><span>FOTO</span></button>
-                 <button onClick={() => document.getElementById('f-vid')?.click()} className="flex-1 flex flex-col items-center justify-center gap-2 p-6 bg-white/10 border border-white/10 rounded-3xl active:scale-95 text-white font-black"><Video size={32} /><span>VIDEO</span></button>
-               </div>
-               <input id="f-cam" type="file" accept="image/*" capture="environment" className="hidden" onChange={async (e) => { 
-                 const f = e.target.files?.[0]; if(f) { const comp = await imageCompression(f, { maxSizeMB: 0.1 }); setTempMedia({ type: 'image', url: URL.createObjectURL(comp), blob: comp }); } 
-               }} />
-               <input id="f-vid" type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => { 
-                 const f = e.target.files?.[0]; if(f) setTempMedia({ type: 'video', url: URL.createObjectURL(f), blob: f }); 
-               }} />
-               {tempMedia && <div className="flex items-center gap-3 bg-emerald-500/10 p-3 rounded-2xl text-emerald-500 text-[11px] font-black uppercase"><CheckCircle size={18} /> Evidencia preparada</div>}
+            
+            <div className="grid grid-cols-2 gap-3 p-4 bg-slate-800/50 rounded-3xl">
+              <button onClick={() => document.getElementById('f-cam')?.click()} className="flex flex-col items-center gap-1 p-4 bg-yellow-400 rounded-2xl text-slate-900 font-black text-[10px] uppercase"><Camera size={24} />FOTO</button>
+              <button onClick={() => document.getElementById('f-vid')?.click()} className="flex flex-col items-center gap-1 p-4 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-[10px] uppercase"><Video size={24} />VIDEO</button>
+              <input id="f-cam" type="file" accept="image/*" capture="environment" className="hidden" onChange={async (e) => { 
+                const f = e.target.files?.[0]; if(f) { const c = await imageCompression(f, { maxSizeMB: 0.1 }); setTempMedia({ type: 'image', url: URL.createObjectURL(c), blob: c }); } 
+              }} />
+              <input id="f-vid" type="file" accept="video/*" capture="environment" className="hidden" onChange={(e) => { 
+                const f = e.target.files?.[0]; if(f) setTempMedia({ type: 'video', url: URL.createObjectURL(f), blob: f }); 
+              }} />
             </div>
+
             {activeMenu === 'main' ? (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { l: 'LIBRE', t: 'Camino Libre', i: CheckCircle, c: 'bg-emerald-500' },
                   { l: 'TRÁFICO', t: 'Tráfico', i: Gauge, c: 'bg-orange-500', s: 'traffic' },
                   { l: 'POLICÍA', t: 'Policía', i: Shield, c: 'bg-blue-600', s: 'police' },
-                  { l: 'ACCIDENTE', t: 'Accidente', i: AlertTriangle, c: 'bg-red-500' },
+                  { l: 'CHOQUE', t: 'Accidente', i: AlertTriangle, c: 'bg-red-500' },
                   { l: 'OBRAS', t: 'Obras', i: HardHat, c: 'bg-yellow-500' },
                   { l: 'OBJETO', t: 'Objeto', i: Box, c: 'bg-stone-600' }
-                ].map((o) => (
-                  <button key={o.l} onClick={() => o.s ? setActiveMenu(o.s as any) : handleReport(o.t)} className={`${o.c} flex flex-col items-center justify-center p-3 rounded-[32px] min-h-[110px] active:scale-95 transition-all shadow-lg border-2 border-transparent hover:border-white/20`}>
-                    <o.i size={28} className="text-white mb-2" />
-                    <span className="text-[10px] font-black text-white uppercase text-center leading-tight tracking-tight">{o.l}</span>
+                ].map(o => (
+                  <button key={o.l} onClick={() => o.s ? setActiveMenu(o.s) : handleReport(o.t)} className={`${o.c} flex flex-col items-center justify-center p-3 rounded-3xl min-h-[90px] active:scale-95 transition-all shadow-lg`}>
+                    <o.i size={24} className="text-white mb-2" />
+                    <span className="text-[9px] font-black text-white uppercase text-center leading-none">{o.l}</span>
                   </button>
                 ))}
               </div>
-            ) : activeMenu === 'traffic' ? (
-              <div className="flex flex-col gap-3">
-                {['Lento', 'Pesado', 'Alto Total'].map(t => <button key={t} onClick={() => handleReport(`Tráfico ${t}`)} className="w-full py-6 bg-orange-500 rounded-[32px] text-white font-black uppercase text-xl shadow-lg active:scale-95 transition-transform">{t}</button>)}
-              </div>
             ) : (
-              <div className="flex flex-col gap-3">
-                {['En la vía', 'Oculto', 'En la otra vía'].map(p => <button key={p} onClick={() => handleReport(`Policía ${p}`)} className="w-full py-6 bg-blue-600 rounded-[32px] text-white font-black uppercase text-xl shadow-lg active:scale-95 transition-transform">{p}</button>)}
+              <div className="flex flex-col gap-2">
+                {(activeMenu === 'traffic' ? ['Lento', 'Pesado', 'Alto Total'] : ['Visible', 'Oculto', 'Otra vía']).map(m => (
+                  <button key={m} onClick={() => handleReport(`${activeMenu === 'traffic' ? 'Tráfico' : 'Policía'} ${m}`)} className={`w-full py-5 rounded-3xl font-black text-white uppercase text-lg ${activeMenu === 'traffic' ? 'bg-orange-500' : 'bg-blue-600'}`}>{m}</button>
+                ))}
               </div>
             )}
-            {isUploading && <div className="flex items-center justify-center gap-3 text-yellow-400 animate-pulse font-black text-sm uppercase tracking-widest"><Loader2 className="animate-spin" /><span>SINCRO...</span></div>}
+            {isUploading && <div className="flex items-center justify-center gap-3 text-yellow-400 font-black uppercase text-xs animate-pulse"><Loader2 className="animate-spin" />Sincronizando...</div>}
           </div>
         </div>
       )}
 
-      <style>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .user-marker-pulse { width: 24px; height: 24px; background: #3b82f6; border: 4px solid white; border-radius: 50%; box-shadow: 0 0 20px rgba(59, 130, 246, 0.6); position: relative; }
-        .user-marker-pulse::after { content: ''; position: absolute; top: -14px; left: -14px; right: -14px; bottom: -14px; border-radius: 50%; background: rgba(59, 130, 246, 0.2); animation: pulse-gps-fx 2s infinite; }
-        @keyframes pulse-gps-fx { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
-      `}</style>
+      {/* MEDIA OVERLAY */}
+      {mediaOverlay && (
+        <div className="fixed inset-0 z-[200] bg-black/98 flex items-center justify-center p-6" onClick={() => setMediaOverlay(null)}>
+          <button className="absolute top-10 right-10 text-white"><X size={40} /></button>
+          {mediaOverlay.type === 'image' ? <img src={mediaOverlay.url} className="max-w-full max-h-full rounded-2xl shadow-2xl" /> : <video src={mediaOverlay.url} controls autoPlay className="max-w-full max-h-full rounded-2xl shadow-2xl" />}
+        </div>
+      )}
+
     </div>
   );
 };

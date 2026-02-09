@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hay Paso - Reporte Vial</title>
+    <title>HAY PASO - Manzanillo</title>
     
     <!-- PWA / Mobile Meta -->
     <meta name="theme-color" content="#0f172a">
@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap">
     
-    <!-- Scripts Críticos solicitados para búsqueda y rutas -->
+    <!-- Scripts de Leaflet (Carga Síncrona para asegurar disponibilidad de window.L) -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
     <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
@@ -27,6 +27,7 @@
         :root {
             --brand-yellow: #FFCC00;
             --brand-dark: #0f172a;
+            --header-height: 80px;
         }
 
         html, body, #root { 
@@ -34,7 +35,6 @@
             background-color: var(--brand-dark); 
             font-family: 'Inter', sans-serif;
             overflow: hidden;
-            position: fixed;
         }
 
         .leaflet-container { 
@@ -43,17 +43,26 @@
             background: #1e293b !important; 
         }
 
-        /* Ocultar contenedores de ruta nativos para usar UI personalizada */
         .leaflet-routing-container { display: none !important; }
 
+        /* Estilos de Scroll Real */
+        .real-scroll {
+            overflow-y: auto !important;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .real-scroll::-webkit-scrollbar { display: none; }
+
+        /* Marcador de Usuario */
         .user-marker-pulse {
-            position: relative;
             width: 20px;
             height: 20px;
             background: #3b82f6;
             border: 3px solid white;
             border-radius: 50%;
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+            position: relative;
         }
         .user-marker-pulse::after {
             content: '';
@@ -61,29 +70,31 @@
             top: -10px; left: -10px; right: -10px; bottom: -10px;
             border-radius: 50%;
             background: rgba(59, 130, 246, 0.2);
-            animation: pulse-gps 2s infinite ease-in-out;
+            animation: pulse-gps-fx 2s infinite ease-in-out;
         }
-        @keyframes pulse-gps {
+        @keyframes pulse-gps-fx {
             0% { transform: scale(1); opacity: 1; }
             100% { transform: scale(2.5); opacity: 0; }
         }
 
-        /* Hide Scrollbar */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Neon Border para el Header */
+        .header-neon-border {
+            border-bottom: 3px solid var(--brand-yellow);
+            box-shadow: 0 4px 15px rgba(255, 204, 0, 0.3);
+        }
     </style>
 <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "leaflet": "https://esm.sh/leaflet@^1.9.4",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.95.3",
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
     "browser-image-compression": "https://esm.sh/browser-image-compression@^2.0.2",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
     "vite": "https://esm.sh/vite@^7.3.1",
-    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0"
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4"
   }
 }
 </script>
